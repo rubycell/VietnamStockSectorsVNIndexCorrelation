@@ -1,4 +1,5 @@
 # Vietnam Stock Sectors VNINDEX Correlation
+Feel free to edit and use this code for your own purposes.
 
 ## Overview
 This project provides an interactive web dashboard that visualises Vietnamese stock market data. It:

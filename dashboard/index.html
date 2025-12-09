@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vietnam Sector Analysis</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Vietnam Market Sector Analysis</h1>
+            <p>Correlation between VN-Index and % of stocks meeting indicator condition</p>
+        </header>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="sectorSelect">Select Sector:</label>
+                <select id="sectorSelect">
+                    <option value="" disabled selected>Loading sectors...</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="indicatorSelect">Select Indicator:</label>
+                <select id="indicatorSelect">
+                    <option value="stoch_20">Stochastic < 20</option>
+                    <option value="smi_40">SMI < -40</option>
+                    <option value="sma_50">Close < SMA(50)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="chart-container" id="chartContainer">
+            <div id="chart"></div>
+            <div class="chart-footer">
+                <div class="legend">
+                    <span class="legend-item"><span class="legend-color vn-index"></span> VN-Index</span>
+                    <span class="legend-item"><span class="legend-color indicator"></span> % Indicator</span>
+                </div>
+                <button id="fullscreenBtn" class="fullscreen-btn" title="Toggle Fullscreen">⛶</button>
+            </div>
+        </div>
+
+        <footer>
+            <p>Data provided by vnstock. Analysis covers last 10 years. Powered by TradingView Lightweight Charts.</p>
+        </footer>
+    </div>
+    <script src="app.js"></script>
+</body>
+
+</html>

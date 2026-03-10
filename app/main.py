@@ -37,8 +37,8 @@ def health_check():
 
 
 # Import and register routers here (before static mount)
-# from app.api.agents import router as agents_router
-# app.include_router(agents_router)
+from app.api.agents import router as agents_router
+app.include_router(agents_router)
 
 if DASHBOARD_DIR.exists():
     app.mount("/", StaticFiles(directory=str(DASHBOARD_DIR), html=True), name="dashboard")

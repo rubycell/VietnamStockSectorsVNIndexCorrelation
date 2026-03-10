@@ -58,5 +58,11 @@ app.include_router(swing_lows_router)
 from app.api.config_api import router as config_router
 app.include_router(config_router)
 
+from app.api.rules import router as rules_router
+app.include_router(rules_router)
+
+from app.api.alerts import router as alerts_router
+app.include_router(alerts_router)
+
 if DASHBOARD_DIR.exists():
     app.mount("/", StaticFiles(directory=str(DASHBOARD_DIR), html=True), name="dashboard")

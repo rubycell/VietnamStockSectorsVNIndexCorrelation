@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  test-runner:
+    build: .
+    command: pytest tests/ -v --tb=short
+    volumes:
+      - ./app:/app/app
+      - ./tests:/app/tests
+      - ./dashboard:/app/dashboard
+    environment:
+      - DATABASE_URL=sqlite:////tmp/test.db
+      - ANTHROPIC_API_KEY=test-key
+    networks:
+      - test-net
+
+networks:
+  test-net:

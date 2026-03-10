@@ -1,3 +1,13 @@
 vnstock
 pandas
 numpy
+pytz
+openpyxl
+fastapi
+uvicorn[standard]
+sqlalchemy
+python-multipart
+anthropic
+httpx
+pytest
+pytest-asyncio

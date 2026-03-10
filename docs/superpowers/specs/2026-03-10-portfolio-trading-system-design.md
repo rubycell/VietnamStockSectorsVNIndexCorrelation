@@ -1,7 +1,7 @@
 # Portfolio Trading System — Design Specification
 
 **Date**: 2026-03-10
-**Status**: Approved
+**Status**: Approved (v2 — Hybrid OpenClaw + FastAPI)
 **Author**: Brainstorming session with user
 
 ## Overview
@@ -11,60 +11,82 @@ A hybrid trading portfolio management system that:
 2. Maintains a unified portfolio with real-time P&L
 3. Evaluates 9 custom trading rules against live price data
 4. Uses AI agents (Claude) for FUD assessment and dynamic market insights
-5. Sends alerts via Telegram and WhatsApp (Evolution API)
+5. Sends alerts via Telegram and WhatsApp (OpenClaw built-in channels)
 6. Extends the existing TradingView Lightweight Charts dashboard
 
 ## Architecture
 
-### System Components
+### Hybrid: OpenClaw + FastAPI
+
+OpenClaw handles messaging (Telegram/WhatsApp), scheduling (cron jobs), and agent orchestration.
+FastAPI handles VN stock-specific domain logic, data pipeline, and serves the dashboard.
 
 ```
-FastAPI Server (API + Dashboard static files)
-    │
-    ├── Upload API (XLSX ingest)
-    ├── Portfolio API (holdings, P&L)
-    ├── Rules API (config, status)
-    ├── Alerts API (history, test)
-    ├── Agents API (CRUD, execute, logs)
-    └── Prices API (on-demand fetch)
-
-Redis (Celery broker + result backend)
-    │
-    ├── Celery Workers (deterministic tasks)
-    │   ├── PriceFetcher — vnstock API, hourly 9am-3pm GMT+7
-    │   ├── PortfolioCalculator — holdings, VWAP, P&L
-    │   ├── SwingLowDetector — custom SMA(10) method
-    │   ├── RuleEvaluator — deterministic rule checks
-    │   └── AlertSender — Evolution API delivery
-    │
-    ├── Celery Beat (scheduler)
-    │   └── Hourly checks 9am-3pm GMT+7 + on-demand
-    │
-    ├── AI Agent Worker (Claude API)
-    │   └── FUDAssessor — structured FUD level assessment
-    │
-    └── Code-Gen Agent Worker (Claude API + exec)
-        └── Dynamic agents: generate Python, execute on dataset
-
-SQLite (trades, holdings, prices, config, agents, agent_runs, alerts)
-
-Evolution API (Docker) → Telegram + WhatsApp
-
-Existing dashboard/ extended with new tabs
+┌──────────────── Docker Compose ─────────────────┐
+│                                                  │
+│  ┌─────────────────────────────────────────┐    │
+│  │         OpenClaw Gateway                 │    │
+│  │                                          │    │
+│  │  Channels:                               │    │
+│  │  ├── Telegram (Bot API)                  │    │
+│  │  └── WhatsApp (Baileys / QR link)        │    │
+│  │                                          │    │
+│  │  Cron Scheduler:                         │    │
+│  │  ├── Hourly checks (9am-3pm GMT+7)      │    │
+│  │  └── Daily reports                       │    │
+│  │                                          │    │
+│  │  Skills (SKILL.md files):                │    │
+│  │  ├── check-portfolio                     │    │
+│  │  ├── evaluate-rules                      │    │
+│  │  ├── run-agent                           │    │
+│  │  ├── fetch-prices                        │    │
+│  │  └── full-check-cycle                    │    │
+│  └──────────────┬──────────────────────────┘    │
+│                  │ HTTP (docker network)         │
+│  ┌──────────────▼──────────────────────────┐    │
+│  │         FastAPI Backend                  │    │
+│  │                                          │    │
+│  │  /api/health                             │    │
+│  │  /api/upload      (TCBS xlsx ingest)    │    │
+│  │  /api/portfolio   (holdings, P&L)       │    │
+│  │  /api/prices      (fetch via vnstock)   │    │
+│  │  /api/rules       (evaluate rules)      │    │
+│  │  /api/swing-lows  (detection)           │    │
+│  │  /api/agents      (CRUD + execute)      │    │
+│  │  /api/alerts      (history, create)     │    │
+│  │  /api/config      (thresholds, levels)  │    │
+│  │                                          │    │
+│  │  SQLite (portfolio.db)                   │    │
+│  │  Code-Gen Engine (exec runner)           │    │
+│  └──────────────────────────────────────────┘    │
+│                                                  │
+│  Dashboard: http://localhost:8000                 │
+└──────────────────────────────────────────────────┘
 ```
 
 ### Technology Stack
 
 | Component | Technology |
 |---|---|
+| Agent orchestration | OpenClaw (gateway + skills + cron) |
+| Messaging | OpenClaw built-in Telegram + WhatsApp |
+| Scheduling | OpenClaw cron jobs |
 | Backend | Python, FastAPI, uvicorn |
-| Task queue | Celery + Redis |
 | Database | SQLite + SQLAlchemy |
-| AI | Claude API (Haiku 4.5 for assessments) |
+| AI (code-gen agents) | Claude API (Haiku 4.5) via FastAPI |
+| AI (reasoning/chat) | OpenClaw's built-in Claude integration |
 | Price data | vnstock (VCI source, 1D resolution) |
-| Alerting | Evolution API (Docker) → Telegram + WhatsApp |
 | Frontend | Vanilla HTML/JS/CSS, TradingView Lightweight Charts v5 |
-| Deployment | Docker Compose (Redis + Evolution API), native Python |
+| Deployment | Docker Compose (OpenClaw + FastAPI) |
+
+### What OpenClaw Replaces
+
+| Removed | Replaced by |
+|---|---|
+| Celery + Redis | OpenClaw cron + direct HTTP calls to FastAPI |
+| Celery Beat scheduler | OpenClaw `cron add --cron "0 9-15 * * 1-5"` |
+| Evolution API | OpenClaw built-in Telegram + WhatsApp channels |
+| Custom alert sender | OpenClaw `--announce --channel telegram` |
 
 ## Data Pipeline
 
@@ -230,13 +252,13 @@ Three sources, merged per ticker:
 
 1. **Structured AI** (`type: structured`): Claude receives data, returns structured JSON. No code generation. Example: FUD Assessor.
 
-2. **Code-Gen AI** (`type: code_gen`): Claude generates Python code from a prompt template, code is executed with `exec()` against the dataset. Full trust (runs in Docker container).
+2. **Code-Gen AI** (`type: code_gen`): Claude generates Python code from a prompt template, code is executed against the dataset. Full trust (runs in Docker container).
 
 ### Code-Gen Execution Flow
 
-1. Celery task triggers agent by schedule or on-demand
-2. Load agent definition from `agents` table
-3. Send to Claude API (Haiku 4.5):
+1. OpenClaw cron or on-demand trigger calls `POST /api/agents/{id}/execute`
+2. FastAPI loads agent definition from `agents` table
+3. Sends to Claude API (Haiku 4.5):
    - System prompt: analyst role, generate pandas/numpy code, return JSON
    - User prompt: filled prompt_template + table schemas + sample rows
 4. Claude returns Python code
@@ -244,7 +266,7 @@ Three sources, merged per ticker:
    - Available: pandas, numpy, datetime, json
    - SQLite connection (read-only access to prices, trades, sectors tables)
 6. Capture result (JSON)
-7. If `alert_on_result` and result is non-empty, queue alert
+7. If `alert_on_result` and result is non-empty, return to OpenClaw for delivery
 8. Log to `agent_runs` table
 
 ### Claude API Usage
@@ -276,13 +298,46 @@ Three sources, merged per ticker:
 - **Agent runs log**: Table showing execution history, generated code viewer, result viewer, errors
 - **Test run**: Execute once and preview results before enabling scheduled runs
 
-## Alerting
+## OpenClaw Integration
 
-### Evolution API (Docker)
+### Skills
 
-- Runs in Docker via `docker-compose.yml`
-- Provides unified API for both Telegram and WhatsApp
-- Config stored in `config` table: API key, instance name, Telegram bot token, WhatsApp number
+Each skill is a `SKILL.md` file in `openclaw/skills/` that teaches OpenClaw how to call FastAPI endpoints.
+
+| Skill | Triggers | FastAPI endpoint |
+|---|---|---|
+| `check-portfolio` | "How's my portfolio?" or cron | `GET /api/portfolio` |
+| `evaluate-rules` | "Check my rules" or cron | `POST /api/rules/evaluate` |
+| `run-agent` | "Run [agent name]" | `POST /api/agents/{id}/execute` |
+| `fetch-prices` | "Update prices" or cron | `POST /api/prices/fetch` |
+| `full-check-cycle` | Hourly cron (9am-3pm) | `POST /api/check-cycle` |
+| `upload-trades` | "I have new trades" | Instructs user to use dashboard upload |
+
+### Cron Jobs
+
+```bash
+# Hourly check during market hours (Mon-Fri, 9am-3pm GMT+7)
+openclaw cron add --name "hourly-check" \
+  --cron "0 9-15 * * 1-5" --tz "Asia/Ho_Chi_Minh" \
+  --session isolated \
+  --message "Run the full check cycle and report any triggered rules" \
+  --announce --channel telegram --to "${TELEGRAM_CHAT_ID}"
+
+# Daily end-of-day report
+openclaw cron add --name "daily-report" \
+  --cron "0 16 * * 1-5" --tz "Asia/Ho_Chi_Minh" \
+  --session isolated \
+  --message "Generate end-of-day portfolio summary and run all daily agents" \
+  --announce --channel telegram --to "${TELEGRAM_CHAT_ID}"
+```
+
+### Alert Delivery via OpenClaw
+
+When FastAPI's rule evaluator detects a trigger:
+1. FastAPI stores alert in `alerts` table
+2. Returns alert data to OpenClaw (via skill response)
+3. OpenClaw formats and sends to Telegram + WhatsApp via its built-in channels
+4. OpenClaw's cron `--announce` flag auto-delivers to configured channels
 
 ### Alert Message Format
 
@@ -300,12 +355,6 @@ Context:
 {timestamp} GMT+7
 ```
 
-### Delivery
-
-- Send to both Telegram and WhatsApp simultaneously
-- If Evolution API is down, log alert to SQLite, show in dashboard
-- Alert history viewable in dashboard Alerts tab
-
 ## Dashboard
 
 ### Tab Navigation
@@ -320,7 +369,7 @@ Extends existing `dashboard/` with tab-based navigation:
 | Rules | `rules.js` (new) | Rule status per ticker, swing lows, price levels |
 | Agents | `agents.js` (new) | Agent management, runs log, create/edit |
 | Alerts | `alerts.js` (new) | Alert history log, test button |
-| Config | `config.js` (new) | FUD thresholds, manual price levels, API settings |
+| Config | `config.js` (new) | FUD thresholds, manual price levels, settings |
 
 ### Portfolio View
 
@@ -343,22 +392,25 @@ vnstocksectorvnindexcorrelation/
 ├── CLAUDE.md
 ├── README.md
 ├── requirements.txt              # updated
-├── docker-compose.yml            # Redis + Evolution API
-├── Dockerfile                    # Full app container
+├── docker-compose.yml            # OpenClaw + FastAPI
+├── Dockerfile                    # FastAPI container
+├── .env                          # secrets (not committed)
 │
-├── app/
+├── app/                          # FastAPI backend
 │   ├── main.py                   # FastAPI app entry
 │   ├── config.py                 # Settings, env vars
-│   ├── database.py               # SQLite setup, migrations
-│   ├── models.py                 # SQLAlchemy + Pydantic models
+│   ├── database.py               # SQLite setup
+│   ├── models.py                 # SQLAlchemy models
 │   │
 │   ├── api/
 │   │   ├── upload.py             # POST /api/upload
 │   │   ├── portfolio.py          # GET /api/portfolio
-│   │   ├── rules.py              # GET/PUT /api/rules
+│   │   ├── rules.py              # GET/POST /api/rules
 │   │   ├── alerts.py             # GET/POST /api/alerts
-│   │   ├── prices.py             # GET /api/prices
-│   │   └── agents.py             # CRUD + execute /api/agents
+│   │   ├── prices.py             # GET/POST /api/prices
+│   │   ├── agents.py             # CRUD + execute /api/agents
+│   │   ├── config.py             # GET/PUT /api/config
+│   │   └── check_cycle.py        # POST /api/check-cycle
 │   │
 │   ├── pipeline/
 │   │   ├── parser.py             # TCBS XLSX parser
@@ -372,17 +424,24 @@ vnstocksectorvnindexcorrelation/
 │   │   ├── price_levels.py       # Resistance, round numbers, manual
 │   │   └── fud.py                # FUD detection logic
 │   │
-│   ├── agents/
-│   │   ├── base.py               # Agent base class
-│   │   ├── fud_assessor.py       # Built-in FUD agent
-│   │   ├── code_executor.py      # exec() runner
-│   │   └── registry.py           # Load agents from DB
-│   │
-│   └── tasks/
-│       ├── celery_app.py         # Celery configuration
-│       ├── price_fetch.py        # Hourly price fetcher
-│       ├── rule_check.py         # Full check cycle orchestrator
-│       └── alert_send.py         # Evolution API sender
+│   └── agents/
+│       ├── base.py               # Agent base class
+│       ├── code_executor.py      # exec() runner
+│       └── registry.py           # Load agents from DB
+│
+├── openclaw/                     # OpenClaw configuration
+│   ├── openclaw.json             # Channel config (Telegram, WhatsApp)
+│   └── skills/
+│       ├── check-portfolio/
+│       │   └── SKILL.md
+│       ├── evaluate-rules/
+│       │   └── SKILL.md
+│       ├── run-agent/
+│       │   └── SKILL.md
+│       ├── fetch-prices/
+│       │   └── SKILL.md
+│       └── full-check-cycle/
+│           └── SKILL.md
 │
 ├── dashboard/
 │   ├── index.html                # Updated with tabs
@@ -396,9 +455,19 @@ vnstocksectorvnindexcorrelation/
 │   ├── styles.css                # Shared styles
 │   └── data.json                 # Existing sector data
 │
+├── tests/
+│   ├── test_database.py
+│   ├── test_pipeline.py
+│   ├── test_portfolio.py
+│   ├── test_rules.py
+│   ├── test_swing_low.py
+│   ├── test_agents.py
+│   ├── test_api_*.py
+│   └── test_integration.py
+│
 ├── data/                         # Existing data cache
 ├── plots/                        # Existing plots
-├── docs/superpowers/specs/       # This document
+├── docs/superpowers/             # Design docs and plans
 │
 ├── analyze_all_sectors.py        # Existing
 ├── cache_sectors.py              # Existing
@@ -408,44 +477,137 @@ vnstocksectorvnindexcorrelation/
 
 ## Dependencies
 
-**New additions to requirements.txt**:
+**requirements.txt** (updated):
 ```
+vnstock
+pandas
+numpy
+pytz
+openpyxl
 fastapi
 uvicorn[standard]
-celery[redis]
-redis
 sqlalchemy
 python-multipart
 anthropic
 httpx
-apscheduler
-vnstock
-pandas
-openpyxl
-numpy
-pytz
+pytest
+pytest-asyncio
+```
+
+No Celery, no Redis — OpenClaw handles scheduling and messaging.
+
+## Docker Compose
+
+```yaml
+version: "3.8"
+
+services:
+  fastapi:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./dashboard:/app/dashboard
+    environment:
+      - DATABASE_URL=sqlite:///data/portfolio.db
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - app-net
+
+  openclaw:
+    image: ghcr.io/openclaw/openclaw:latest
+    volumes:
+      - ./openclaw:/home/node/.openclaw
+    ports:
+      - "18789:18789"
+    environment:
+      - HOME=/home/node
+    command: ["node", "dist/index.js", "gateway", "--bind", "lan"]
+    depends_on:
+      fastapi:
+        condition: service_healthy
+    networks:
+      - app-net
+
+networks:
+  app-net:
 ```
 
 ## Running the System
 
 ```bash
-# 1. Start Redis + Evolution API (Docker)
+# Start everything
 docker-compose up -d
 
-# 2. Start FastAPI server
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+# First time: set up OpenClaw channels
+docker-compose exec openclaw openclaw setup    # Telegram bot token, WhatsApp QR
 
-# 3. Start Celery worker
-celery -A app.tasks.celery_app worker --loglevel=info
+# Add cron jobs
+docker-compose exec openclaw openclaw cron add \
+  --name "hourly-check" \
+  --cron "0 9-15 * * 1-5" --tz "Asia/Ho_Chi_Minh" \
+  --session isolated \
+  --message "Run the full check cycle" \
+  --announce --channel telegram
 
-# 4. Start Celery Beat (scheduler)
-celery -A app.tasks.celery_app beat --loglevel=info
+# Dashboard
+open http://localhost:8000
 ```
 
-Or with Docker Compose (full stack):
-```bash
-docker-compose --profile full up -d
+## Testing Strategy
+
+### Three test layers
+
+1. **Unit tests** (pytest, inside FastAPI container):
+   - Pipeline: parser, cleaner, deduplicator
+   - Engine: portfolio calc, swing low, rules, FUD, price levels
+   - Agents: base class, code executor, registry
+   - Run: `docker-compose exec fastapi pytest tests/ -v`
+
+2. **Integration tests** (pytest, FastAPI + SQLite):
+   - Full API flows: upload → portfolio → rules → alerts
+   - Agent CRUD + execute with mocked Claude
+   - Run: `docker-compose exec fastapi pytest tests/test_integration.py -v`
+
+3. **E2E tests** (OpenClaw skill → FastAPI → verify):
+   - Trigger skill via OpenClaw CLI, verify FastAPI response
+   - Cron trigger → check alert created in DB
+   - Run: `docker-compose exec openclaw openclaw cron run <jobId> --due`
+
+### docker-compose.test.yml
+
+```yaml
+version: "3.8"
+
+services:
+  test-runner:
+    build: .
+    command: pytest tests/ -v --tb=short
+    volumes:
+      - ./data:/app/data
+      - ./tests:/app/tests
+    environment:
+      - DATABASE_URL=sqlite:///tmp/test.db
+      - ANTHROPIC_API_KEY=test-key
+    networks:
+      - app-net
+
+  fastapi:
+    build: .
+    networks:
+      - app-net
+
+networks:
+  app-net:
 ```
+
+Run: `docker-compose -f docker-compose.test.yml up --abort-on-container-exit`
 
 ## Data Files Analyzed
 

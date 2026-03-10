@@ -54,9 +54,8 @@ def test_full_stack(client):
     assert execute_result["success"] is True, f"Execute failed: {execute_result.get('error')}"
     assert execute_result["output"]["count"] == 0
 
-    # Check cycle with mocked agent runner
-    with patch("app.api.check_cycle.run_agent", return_value={"success": True, "output": {}}):
-        response = client.post("/api/check-cycle")
+    # Check cycle (no holdings, so runs with empty results)
+    response = client.post("/api/check-cycle")
     assert response.json()["success"] is True
 
     # Cleanup

@@ -43,5 +43,8 @@ app.include_router(agents_router)
 from app.api.check_cycle import router as check_cycle_router
 app.include_router(check_cycle_router)
 
+from app.api.portfolio import router as portfolio_router
+app.include_router(portfolio_router)
+
 if DASHBOARD_DIR.exists():
     app.mount("/", StaticFiles(directory=str(DASHBOARD_DIR), html=True), name="dashboard")

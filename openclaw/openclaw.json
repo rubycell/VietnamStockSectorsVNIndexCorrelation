@@ -4,6 +4,23 @@
       "enabled": true,
       "botToken": "${TELEGRAM_BOT_TOKEN}",
       "dmPolicy": "pairing"
+    },
+    "whatsapp": {
+      "enabled": false,
+      "apiToken": "${WHATSAPP_API_TOKEN}",
+      "dmPolicy": "pairing"
+    }
+  },
+  "cron": {
+    "hourly-market-check": {
+      "schedule": "0 2-8 * * 1-5",
+      "skill": "full-check-cycle",
+      "description": "Hourly market check 9am-3pm ICT (UTC+7) on weekdays"
+    },
+    "daily-report": {
+      "schedule": "30 8 * * 1-5",
+      "skill": "daily-report",
+      "description": "Daily portfolio report at 3:30pm ICT (UTC+7) on weekdays"
     }
   },
   "skills": {
@@ -21,6 +38,18 @@
         }
       },
       "run-agent": {
+        "enabled": true,
+        "env": {
+          "FASTAPI_URL": "http://fastapi:8000"
+        }
+      },
+      "daily-report": {
+        "enabled": true,
+        "env": {
+          "FASTAPI_URL": "http://fastapi:8000"
+        }
+      },
+      "send-alert": {
         "enabled": true,
         "env": {
           "FASTAPI_URL": "http://fastapi:8000"

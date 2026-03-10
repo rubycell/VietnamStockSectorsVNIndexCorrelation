@@ -1,26 +1,38 @@
 {
+  "agents": {
+    "defaults": {
+      "contextPruning": {
+        "mode": "cache-ttl",
+        "ttl": "1h"
+      },
+      "compaction": {
+        "mode": "safeguard"
+      },
+      "heartbeat": {
+        "every": "30m"
+      }
+    }
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true,
+    "ownerDisplay": "raw"
+  },
   "channels": {
     "telegram": {
       "enabled": true,
+      "dmPolicy": "pairing",
       "botToken": "${TELEGRAM_BOT_TOKEN}",
-      "dmPolicy": "pairing"
-    },
-    "whatsapp": {
-      "enabled": false,
-      "apiToken": "${WHATSAPP_API_TOKEN}",
-      "dmPolicy": "pairing"
+      "groupPolicy": "allowlist",
+      "streaming": "partial"
     }
   },
-  "cron": {
-    "hourly-market-check": {
-      "schedule": "0 2-8 * * 1-5",
-      "skill": "full-check-cycle",
-      "description": "Hourly market check 9am-3pm ICT (UTC+7) on weekdays"
-    },
-    "daily-report": {
-      "schedule": "30 8 * * 1-5",
-      "skill": "daily-report",
-      "description": "Daily portfolio report at 3:30pm ICT (UTC+7) on weekdays"
+  "gateway": {
+    "mode": "local",
+    "auth": {
+      "mode": "token",
+      "token": "3a86f6fa78637f3a3c6f9a96ab753f2392eff92f0a88f35f"
     }
   },
   "skills": {
@@ -56,5 +68,9 @@
         }
       }
     }
+  },
+  "meta": {
+    "lastTouchedVersion": "2026.3.8",
+    "lastTouchedAt": "2026-03-10T09:07:13.610Z"
   }
 }

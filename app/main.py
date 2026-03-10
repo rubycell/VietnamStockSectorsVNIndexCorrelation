@@ -46,5 +46,17 @@ app.include_router(check_cycle_router)
 from app.api.portfolio import router as portfolio_router
 app.include_router(portfolio_router)
 
+from app.api.upload import router as upload_router
+app.include_router(upload_router)
+
+from app.api.prices import router as prices_router
+app.include_router(prices_router)
+
+from app.api.swing_lows import router as swing_lows_router
+app.include_router(swing_lows_router)
+
+from app.api.config_api import router as config_router
+app.include_router(config_router)
+
 if DASHBOARD_DIR.exists():
     app.mount("/", StaticFiles(directory=str(DASHBOARD_DIR), html=True), name="dashboard")

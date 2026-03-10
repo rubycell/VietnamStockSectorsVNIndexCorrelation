@@ -102,3 +102,22 @@ def delete_agent(
         raise HTTPException(404, "Agent not found")
     session.delete(agent)
     session.commit()
+
+
+from app.agents.runner import run_agent
+
+
+class AgentExecuteRequest(BaseModel):
+    variables: dict | None = None
+
+
+@router.post("/{agent_id}/execute")
+def execute_agent(
+    agent_id: str,
+    body: AgentExecuteRequest = AgentExecuteRequest(),
+    session: Session = Depends(get_database_session),
+):
+    agent = session.query(Agent).filter_by(id=agent_id).first()
+    if not agent:
+        raise HTTPException(404, "Agent not found")
+    return run_agent(agent_id, body.variables, session=session)

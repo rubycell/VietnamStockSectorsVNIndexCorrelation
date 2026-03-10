@@ -40,5 +40,8 @@ def health_check():
 from app.api.agents import router as agents_router
 app.include_router(agents_router)
 
+from app.api.check_cycle import router as check_cycle_router
+app.include_router(check_cycle_router)
+
 if DASHBOARD_DIR.exists():
     app.mount("/", StaticFiles(directory=str(DASHBOARD_DIR), html=True), name="dashboard")

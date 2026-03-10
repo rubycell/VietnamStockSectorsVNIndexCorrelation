@@ -28,6 +28,7 @@ services:
       - HOME=/home/node
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - WHATSAPP_API_TOKEN=${WHATSAPP_API_TOKEN:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     command: ["node", "dist/index.js", "gateway", "--bind", "lan"]
     depends_on:
       fastapi:

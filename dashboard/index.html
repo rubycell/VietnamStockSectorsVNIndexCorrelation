@@ -17,39 +17,76 @@
             <p>Correlation between VN-Index and % of stocks meeting indicator condition</p>
         </header>
 
-        <div class="controls">
-            <div class="control-group">
-                <label for="sectorSelect">Select Sector:</label>
-                <select id="sectorSelect">
-                    <option value="" disabled selected>Loading sectors...</option>
-                </select>
+        <nav class="tab-bar">
+            <button class="tab-button active" data-tab="sectors">Sectors</button>
+            <button class="tab-button" data-tab="portfolio">Portfolio</button>
+            <button class="tab-button" data-tab="trades">Trades</button>
+            <button class="tab-button" data-tab="rules">Rules</button>
+            <button class="tab-button" data-tab="agents">Agents</button>
+            <button class="tab-button" data-tab="alerts">Alerts</button>
+            <button class="tab-button" data-tab="config">Config</button>
+        </nav>
+
+        <!-- Sectors Tab (existing) -->
+        <div class="tab-content active" id="tab-sectors">
+            <div class="controls">
+                <div class="control-group">
+                    <label for="sectorSelect">Select Sector:</label>
+                    <select id="sectorSelect">
+                        <option value="" disabled selected>Loading sectors...</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="indicatorSelect">Select Indicator:</label>
+                    <select id="indicatorSelect">
+                        <option value="stoch_20">Stochastic < 20</option>
+                        <option value="smi_40">SMI < -40</option>
+                        <option value="sma_50">Close < SMA(50)</option>
+                    </select>
+                </div>
             </div>
-            <div class="control-group">
-                <label for="indicatorSelect">Select Indicator:</label>
-                <select id="indicatorSelect">
-                    <option value="stoch_20">Stochastic < 20</option>
-                    <option value="smi_40">SMI < -40</option>
-                    <option value="sma_50">Close < SMA(50)</option>
-                </select>
+
+            <div class="chart-container" id="chartContainer">
+                <div id="chart"></div>
+                <div class="chart-footer">
+                    <div class="legend">
+                        <span class="legend-item"><span class="legend-color vn-index"></span> VN-Index</span>
+                        <span class="legend-item"><span class="legend-color indicator"></span> % Indicator</span>
+                    </div>
+                    <button id="fullscreenBtn" class="fullscreen-btn" title="Toggle Fullscreen">&#x26F6;</button>
+                </div>
             </div>
         </div>
 
-        <div class="chart-container" id="chartContainer">
-            <div id="chart"></div>
-            <div class="chart-footer">
-                <div class="legend">
-                    <span class="legend-item"><span class="legend-color vn-index"></span> VN-Index</span>
-                    <span class="legend-item"><span class="legend-color indicator"></span> % Indicator</span>
-                </div>
-                <button id="fullscreenBtn" class="fullscreen-btn" title="Toggle Fullscreen">⛶</button>
-            </div>
-        </div>
+        <!-- Portfolio Tab -->
+        <div class="tab-content" id="tab-portfolio"></div>
+
+        <!-- Trades Tab -->
+        <div class="tab-content" id="tab-trades"></div>
+
+        <!-- Rules Tab -->
+        <div class="tab-content" id="tab-rules"></div>
+
+        <!-- Agents Tab -->
+        <div class="tab-content" id="tab-agents"></div>
+
+        <!-- Alerts Tab -->
+        <div class="tab-content" id="tab-alerts"></div>
+
+        <!-- Config Tab -->
+        <div class="tab-content" id="tab-config"></div>
 
         <footer>
             <p>Data provided by vnstock. Analysis covers last 10 years. Powered by TradingView Lightweight Charts.</p>
         </footer>
     </div>
     <script src="app.js"></script>
+    <script src="portfolio.js"></script>
+    <script src="trades.js"></script>
+    <script src="rules.js"></script>
+    <script src="agents.js"></script>
+    <script src="alerts.js"></script>
+    <script src="config.js"></script>
 </body>
 
 </html>

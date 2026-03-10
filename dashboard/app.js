@@ -1,26 +1,120 @@
+/* global LightweightCharts */
+
 let chart = null;
 let vnindexSeries = null;
 let indicatorSeries = null;
 let dashboardData = null;
 
-document.addEventListener('DOMContentLoaded', async () => {
+// ── Tab Router ──────────────────────────────────────────────────
+
+const tabModules = {};
+const loadedTabs = new Set();
+
+function initTabRouter() {
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const tabName = button.dataset.tab;
+
+            tabButtons.forEach(b => b.classList.remove('active'));
+            tabContents.forEach(c => c.classList.remove('active'));
+
+            button.classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+
+            if (!loadedTabs.has(tabName) && tabModules[tabName]) {
+                loadedTabs.add(tabName);
+                tabModules[tabName]();
+            }
+
+            if (tabName === 'sectors' && chart) {
+                setTimeout(() => {
+                    const chartContainer = document.getElementById('chart');
+                    chart.applyOptions({ width: chartContainer.clientWidth });
+                }, 50);
+            }
+        });
+    });
+
+    loadedTabs.add('sectors');
+}
+
+function registerTab(name, initFunction) {
+    tabModules[name] = initFunction;
+}
+
+// ── API Helper ──────────────────────────────────────────────────
+
+async function apiFetch(url, options = {}) {
+    const response = await fetch(url, {
+        headers: { 'Content-Type': 'application/json', ...options.headers },
+        ...options,
+    });
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API error ${response.status}: ${errorText}`);
+    }
+    if (response.status === 204) return null;
+    return response.json();
+}
+
+function formatNumber(value, decimals = 0) {
+    if (value == null || isNaN(value)) return '-';
+    return new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+    }).format(value);
+}
+
+function formatCurrency(value) {
+    if (value == null || isNaN(value)) return '-';
+    return formatNumber(value, 0) + ' VND';
+}
+
+function pnlClass(value) {
+    if (value > 0) return 'positive';
+    if (value < 0) return 'negative';
+    return '';
+}
+
+function severityBadge(severity) {
+    const cls = severity === 'CRITICAL' ? 'severity-critical'
+        : severity === 'WARNING' ? 'severity-warning'
+        : 'severity-info';
+    return `<span class="severity-badge ${cls}">${severity}</span>`;
+}
+
+function showLoading(container) {
+    container.innerHTML = '<div class="loading">Loading</div>';
+}
+
+function showError(container, message) {
+    container.innerHTML = `<div class="status-message status-error">${message}</div>`;
+}
+
+function showEmpty(container, message) {
+    container.innerHTML = `<div class="empty-state"><p>${message}</p></div>`;
+}
+
+// ── Sectors Tab (existing chart logic) ──────────────────────────
+
+async function initSectorsTab() {
     const sectorSelect = document.getElementById('sectorSelect');
     const indicatorSelect = document.getElementById('indicatorSelect');
     const chartContainer = document.getElementById('chart');
 
-    // Fetch Data
     try {
         const response = await fetch('data.json');
         dashboardData = await response.json();
     } catch (e) {
         console.error("Failed to load data.json", e);
-        alert("Error loading data. Make sure server is running.");
         return;
     }
 
-    const { dates, vnindex, sectors } = dashboardData;
+    const { sectors } = dashboardData;
 
-    // Populate Sector Select
     sectorSelect.innerHTML = '';
     const sectorNames = Object.keys(sectors).sort();
 
@@ -31,7 +125,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         sectorSelect.appendChild(option);
     });
 
-    // Create Chart (v5 API)
     chart = LightweightCharts.createChart(chartContainer, {
         width: chartContainer.clientWidth,
         height: 500,
@@ -60,14 +153,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         },
     });
 
-    // VN-Index Series (Left Axis) - v5 API
     vnindexSeries = chart.addSeries(LightweightCharts.LineSeries, {
         color: '#3b82f6',
         lineWidth: 2,
         priceScaleId: 'left',
     });
 
-    // Indicator Series (Right Axis) - v5 API
     indicatorSeries = chart.addSeries(LightweightCharts.AreaSeries, {
         topColor: 'rgba(251, 146, 60, 0.5)',
         bottomColor: 'rgba(251, 146, 60, 0.05)',
@@ -76,15 +167,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         priceScaleId: 'right',
     });
 
-    // Set defaults
     const defaultSector = sectorNames.includes('Ngân hàng') ? 'Ngân hàng' : sectorNames[0];
     sectorSelect.value = defaultSector;
     indicatorSelect.value = 'stoch_20';
 
-    // Initial Plot
     updateChart(defaultSector, 'stoch_20');
 
-    // Event Listeners
     sectorSelect.addEventListener('change', () => {
         updateChart(sectorSelect.value, indicatorSelect.value);
     });
@@ -93,12 +181,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateChart(sectorSelect.value, indicatorSelect.value);
     });
 
-    // Handle Resize
     window.addEventListener('resize', () => {
-        chart.applyOptions({ width: chartContainer.clientWidth });
+        if (chart) {
+            chart.applyOptions({ width: chartContainer.clientWidth });
+        }
     });
 
-    // Fullscreen toggle
     const fullscreenBtn = document.getElementById('fullscreenBtn');
     const chartContainerEl = document.getElementById('chartContainer');
 
@@ -125,13 +213,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     document.addEventListener('fullscreenchange', () => {
-        if (!document.fullscreenElement) {
+        if (!document.fullscreenElement && chart) {
             chart.applyOptions({ width: chartContainer.clientWidth, height: 500 });
         }
     });
-});
+}
 
 function updateChart(sectorName, indicatorKey) {
+    if (!dashboardData) return;
     const { dates, vnindex, sectors } = dashboardData;
     const sectorData = sectors[sectorName];
     if (!sectorData) return;
@@ -139,7 +228,6 @@ function updateChart(sectorName, indicatorKey) {
     const indicatorData = sectorData[indicatorKey];
     if (!indicatorData) return;
 
-    // Format data for Lightweight Charts
     const vnindexData = [];
     const indicatorChartData = [];
 
@@ -158,6 +246,12 @@ function updateChart(sectorName, indicatorKey) {
 
     vnindexSeries.setData(vnindexData);
     indicatorSeries.setData(indicatorChartData);
-
     chart.timeScale().fitContent();
 }
+
+// ── Init ────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+    initTabRouter();
+    initSectorsTab();
+});

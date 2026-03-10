@@ -1,0 +1,31 @@
+{
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "botToken": "${TELEGRAM_BOT_TOKEN}",
+      "dmPolicy": "pairing"
+    }
+  },
+  "skills": {
+    "entries": {
+      "full-check-cycle": {
+        "enabled": true,
+        "env": {
+          "FASTAPI_URL": "http://fastapi:8000"
+        }
+      },
+      "check-portfolio": {
+        "enabled": true,
+        "env": {
+          "FASTAPI_URL": "http://fastapi:8000"
+        }
+      },
+      "run-agent": {
+        "enabled": true,
+        "env": {
+          "FASTAPI_URL": "http://fastapi:8000"
+        }
+      }
+    }
+  }
+}

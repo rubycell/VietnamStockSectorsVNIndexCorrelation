@@ -49,8 +49,10 @@ def clean_fills(dataframe: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-def _parse_date(value) -> date:
-    """Parse date from various TCBS formats."""
+def _parse_date(value):
+    """Parse date from various TCBS formats. Returns None for NaN/empty."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
@@ -59,6 +61,8 @@ def _parse_date(value) -> date:
         return value.date()
 
     text = str(value).strip()
+    if not text or text.lower() == "nan":
+        return None
     for date_format in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
         try:
             return datetime.strptime(text, date_format).date()

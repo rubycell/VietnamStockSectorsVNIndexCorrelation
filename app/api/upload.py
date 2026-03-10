@@ -44,7 +44,7 @@ async def upload_trades(
             "cleaned_columns": list(cleaned_dataframe.columns),
             "first_raw_row": (
                 raw_dataframe.head(1).to_dict(orient="records")[0]
-                if len(raw_dataframe) > 0
+                if not raw_dataframe.empty
                 else None
             ),
         }

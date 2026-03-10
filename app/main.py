@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import DASHBOARD_DIR, DATABASE_URL
 from app.database import create_engine_and_tables, get_session
+from app.agents.seed import seed_agents
 
 app = FastAPI(title="Portfolio Trading System", version="0.1.0")
 
@@ -19,6 +20,16 @@ app.add_middleware(
 
 engine = create_engine_and_tables(DATABASE_URL)
 SessionFactory = get_session(engine)
+
+
+@app.on_event("startup")
+def startup_event():
+    """Seed initial agent definitions on application start."""
+    session = SessionFactory()
+    try:
+        seed_agents(session)
+    finally:
+        session.close()
 
 
 def get_database_session():

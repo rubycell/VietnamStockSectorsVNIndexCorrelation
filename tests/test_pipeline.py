@@ -97,6 +97,33 @@ def test_clean_fills_order_no_as_string():
         assert isinstance(val, str)
 
 
+def test_parse_auto_detects_header_at_row_10():
+    """Parser should auto-detect header row even if not at default row 15."""
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+
+    # Only 9 padding rows, then header at row 10
+    for i in range(9):
+        ws.append([""])
+
+    headers = ["Mã CP", "Ngày GD", "Giao dịch", "KL đặt", "Giá đặt",
+               "KL khớp", "Giá khớp", "Giá trị khớp", "Phí", "Thuế",
+               "Giá vốn", "Lãi lỗ", "Kênh GD", "Trạng thái", "Loại lệnh", "Số hiệu lệnh"]
+    ws.append(headers)
+
+    ws.append(["HPG", "20/02/2025", "Mua", 200, 25000, 200, 25000, 5000000,
+               7000, 0, 25000, 0, "Online", "Hoàn tất", "Lệnh thường", "GHI789"])
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    df = parse_tcbs_xlsx(buf)
+    assert len(df) == 1
+    assert df.iloc[0]["ticker"] == "HPG"
+
+
 def test_validate_fills_rejects_missing_ticker():
     df = pd.DataFrame([{
         "ticker": None, "trading_date": "2025-01-15", "trade_side": "BUY",

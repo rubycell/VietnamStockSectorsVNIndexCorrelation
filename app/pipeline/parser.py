@@ -53,20 +53,50 @@ def extract_account_type(file: BinaryIO) -> str:
     return "unknown"
 
 
+def _detect_header_row(file: BinaryIO) -> int:
+    """Auto-detect the header row by scanning for known column names.
+
+    Scans the first 30 rows looking for a row that contains at least 3
+    of our known Vietnamese column names (e.g. 'Mã CP', 'Ngày GD').
+    Returns the 0-indexed row number, defaults to 14 if not found.
+    """
+    file.seek(0)
+    workbook = openpyxl.load_workbook(file, read_only=True, data_only=True)
+    worksheet = workbook.active
+
+    known_headers = set(COLUMN_MAP.keys())
+
+    for row_index, row in enumerate(worksheet.iter_rows(
+        min_row=1, max_row=30, values_only=True
+    )):
+        cell_values = {str(cell).strip() for cell in row if cell is not None}
+        matches = cell_values & known_headers
+        if len(matches) >= 3:
+            workbook.close()
+            file.seek(0)
+            return row_index
+
+    workbook.close()
+    file.seek(0)
+    return 14  # fallback to original default
+
+
 def parse_tcbs_xlsx(file: BinaryIO) -> pd.DataFrame:
     """Parse a TCBS trade history XLSX into a normalized DataFrame.
 
-    - Reads from row 15 (header_row=14 in 0-indexed)
+    - Auto-detects header row by scanning for Vietnamese column names
     - Maps Vietnamese column names to English
     - Filters footer/total rows
     - Ensures order_no is string type
     """
     file.seek(0)
 
-    # Read with header at row 14 (0-indexed), order_no as string to preserve hex IDs
+    header_row = _detect_header_row(file)
+
+    # Read with auto-detected header, order_no as string to preserve hex IDs
     dataframe = pd.read_excel(
         file,
-        header=14,
+        header=header_row,
         dtype={"Số hiệu lệnh": str},
         engine="openpyxl",
     )

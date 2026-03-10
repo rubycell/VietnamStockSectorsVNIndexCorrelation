@@ -37,9 +37,23 @@ async def upload_trades(
     valid_dataframe, invalid_dataframe = validate_fills(cleaned_dataframe)
 
     if len(valid_dataframe) == 0:
+        # Include diagnostic info to help debug column/header issues
+        diagnostics = {
+            "raw_columns": list(raw_dataframe.columns),
+            "raw_row_count": len(raw_dataframe),
+            "cleaned_columns": list(cleaned_dataframe.columns),
+            "first_raw_row": (
+                raw_dataframe.head(1).to_dict(orient="records")[0]
+                if len(raw_dataframe) > 0
+                else None
+            ),
+        }
         raise HTTPException(
             400,
-            f"No valid trades found. {len(invalid_dataframe)} rows rejected.",
+            {
+                "message": f"No valid trades found. {len(invalid_dataframe)} rows rejected.",
+                "diagnostics": diagnostics,
+            },
         )
 
     # Create import batch

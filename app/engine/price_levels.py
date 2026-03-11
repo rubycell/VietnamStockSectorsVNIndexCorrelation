@@ -1,42 +1,68 @@
 """Important price level detection.
 
 Three sources:
-1. Round number levels (5k, 10k VND increments)
+1. Round number levels (configurable increments, default 50k/100k VND)
 2. Resistance zones (swing highs - inverse of swing low)
 3. Manual levels (user-configured)
 """
 
 import pandas as pd
 
+DEFAULT_INCREMENTS = [50, 100]
+
 
 def get_round_number_levels(
     current_price: float,
-    range_pct: float = 20.0,
+    nearest_count: int = 3,
+    increments: list[float] | None = None,
 ) -> list[dict]:
     """Get round number levels near the current price.
 
-    Returns levels at 5,000 and 10,000 VND increments
-    within range_pct% of current price.
-    """
-    low_bound = current_price * (1 - range_pct / 100)
-    high_bound = current_price * (1 + range_pct / 100)
+    Finds the nearest N levels above and below for each increment size.
+    Prices are in x1000 VND (vnstock convention), so increment=50 means 50,000 VND.
 
+    Args:
+        current_price: Current stock price (in x1000 VND, e.g. 23.1 = 23,100 VND)
+        nearest_count: Number of levels above and below to include (default 3)
+        increments: List of round number increments (in x1000 VND).
+                    Loaded from config key 'round_number_increments'.
+                    Default: [50, 100] meaning 50k and 100k VND
+    """
+    if increments is None:
+        increments = DEFAULT_INCREMENTS
+
+    seen_prices = set()
     levels = []
 
-    # 5,000 VND increments
-    start_5k = int(low_bound / 5000) * 5000
-    price = start_5k
-    while price <= high_bound:
-        if price > 0:
-            is_10k = price % 10000 == 0
+    for increment in sorted(increments):
+        if increment <= 0:
+            continue
+
+        # Find the nearest round number below current price
+        base = int(current_price / increment) * increment
+
+        # Generate nearest_count levels below and above
+        for offset in range(-nearest_count, nearest_count + 1):
+            price = base + offset * increment
+            if price <= 0 or price in seen_prices:
+                continue
+            seen_prices.add(price)
+
+            # Label: convert back to VND for display
+            vnd_price = price * 1000
+            if vnd_price >= 1_000_000:
+                label = f"{vnd_price / 1_000_000:.1f}M"
+            else:
+                label = f"{vnd_price / 1000:.0f}k"
+
             levels.append({
                 "price": price,
                 "level_type": "round",
-                "description": f"Round {'10k' if is_10k else '5k'}: {price:,.0f}",
+                "description": f"Round {label}",
+                "increment": increment,
             })
-        price += 5000
 
-    return levels
+    return sorted(levels, key=lambda x: x["price"])
 
 
 def detect_resistance_zones(

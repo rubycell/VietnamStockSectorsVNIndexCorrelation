@@ -1,15 +1,15 @@
 ---
 name: send-alert
-description: Forward trading alerts from the rules engine to the user via messaging channels
+description: Forward trading alerts from the rules engine to the user via Discord
 ---
 
 ## Instructions
 
 When called with alert data (from the check cycle or rules evaluation):
 
-1. Fetch unsent alerts for the active channel:
+1. Fetch unsent alerts for Discord:
    ```
-   curl -s "http://fastapi:8000/api/alerts/unsent?channel=<CHANNEL_NAME>"
+   curl -s "http://fastapi:8000/api/alerts/unsent?channel=discord"
    ```
 
 2. Format each alert message based on severity:
@@ -20,15 +20,20 @@ When called with alert data (from the check cycle or rules evaluation):
      {message}
      ⚡ Immediate action may be required
      ```
-   - **WARNING** (rules #2, #6, #7): Important but not urgent
+   - **WARNING** (rules #2, #6, #8): Important but not urgent
      ```
      ⚠️ WARNING — {ticker}
      Rule: {rule_id}
      {message}
      ```
-   - **INFO** (rules #1, #3, #5, #8): Informational only
+   - **INFO** (rules #7): Informational only
      ```
      ℹ️ {ticker} — {message}
      ```
 
-3. Send the formatted message to the user.
+3. Send the formatted message to the user via Discord.
+
+4. After sending, mark each alert as sent:
+   ```
+   curl -s -X POST "http://fastapi:8000/api/alerts/{alert_id}/mark-sent" -H "Content-Type: application/json" -d '{"channel": "discord"}'
+   ```

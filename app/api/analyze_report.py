@@ -92,8 +92,16 @@ async def _analyze_with_notebooklm(
     pdf_bytes: bytes,
     title: str,
     question: str,
+    existing_notebook_id: str | None = None,
+    notebook_display_name: str | None = None,
 ) -> dict:
-    """Create a NotebookLM notebook, add PDF source, and ask a question."""
+    """Add PDF to a NotebookLM notebook and ask a question.
+
+    If existing_notebook_id is provided, adds the PDF as a new source to that
+    notebook (multi-source context). Otherwise creates a new notebook.
+
+    Returns {"notebook_id": ..., "answer": ..., "created_new": bool}.
+    """
     from notebooklm import NotebookLMClient
 
     storage_path = str(NOTEBOOKLM_STORAGE)
@@ -106,13 +114,19 @@ async def _analyze_with_notebooklm(
         temp_file.write(pdf_bytes)
         temp_path = temp_file.name
 
+    created_new = False
     try:
         async with await NotebookLMClient.from_storage(path=storage_path) as client:
-            notebook = await client.notebooks.create(f"Report: {title[:80]}")
-            notebook_id = notebook.id
+            if existing_notebook_id:
+                notebook_id = existing_notebook_id
+            else:
+                display = notebook_display_name or f"Report: {title[:80]}"
+                notebook = await client.notebooks.create(display)
+                notebook_id = notebook.id
+                created_new = True
 
             await client.sources.add_file(
-                notebook_id, temp_path, wait=True
+                notebook_id, temp_path, wait=True,
             )
 
             result = await client.chat.ask(notebook_id, question)
@@ -120,6 +134,7 @@ async def _analyze_with_notebooklm(
             return {
                 "notebook_id": notebook_id,
                 "answer": result.answer,
+                "created_new": created_new,
             }
     finally:
         Path(temp_path).unlink(missing_ok=True)
@@ -131,7 +146,19 @@ async def _analyze_with_notebooklm(
 
 
 async def _run_analysis_job(job_id: str, report: dict, question: str) -> None:
-    """Run analysis in the background and update the job store."""
+    """Run analysis in the background and update the job store.
+
+    Routes the report to the appropriate persistent notebook (by ticker or
+    category) so that context accumulates across multiple reports.
+    """
+    from app.main import SessionFactory
+    from app.notebooks import (
+        resolve_notebook_target,
+        get_or_create_notebook_mapping,
+        save_notebook_mapping,
+        increment_source_count,
+    )
+
     job = _jobs[job_id]
     job["status"] = "running"
     job["started_at"] = datetime.now(timezone.utc).isoformat()
@@ -144,12 +171,43 @@ async def _run_analysis_job(job_id: str, report: dict, question: str) -> None:
             job["completed_at"] = datetime.now(timezone.utc).isoformat()
             return
 
-        result = await _analyze_with_notebooklm(
-            pdf_bytes, report["title"], question,
+        # Resolve which notebook this report belongs to
+        notebook_type, notebook_key, display_name = resolve_notebook_target(
+            report.get("ticker"), report["title"],
         )
-        job["status"] = "completed"
-        job["answer"] = result["answer"]
-        job["notebook_id"] = result["notebook_id"]
+
+        db_session = SessionFactory()
+        try:
+            existing = get_or_create_notebook_mapping(
+                db_session, notebook_type, notebook_key, display_name,
+            )
+            existing_notebook_id = existing.notebook_id if existing else None
+
+            result = await _analyze_with_notebooklm(
+                pdf_bytes,
+                report["title"],
+                question,
+                existing_notebook_id=existing_notebook_id,
+                notebook_display_name=display_name,
+            )
+
+            # Save new mapping or update source count
+            if result["created_new"]:
+                save_notebook_mapping(
+                    db_session, notebook_type, notebook_key,
+                    result["notebook_id"], display_name,
+                )
+            elif existing:
+                increment_source_count(db_session, existing)
+
+            job["status"] = "completed"
+            job["answer"] = result["answer"]
+            job["notebook_id"] = result["notebook_id"]
+            job["notebook_type"] = notebook_type
+            job["notebook_key"] = notebook_key
+        finally:
+            db_session.close()
+
     except Exception as error:
         job["status"] = "failed"
         job["error"] = str(error)
@@ -270,15 +328,47 @@ async def analyze_report_sync(
 
 
 @router.get("/notebooks")
-async def list_notebooks():
-    """List all NotebookLM notebooks (for management)."""
+async def list_notebooks(
+    session: Session = Depends(get_database_session),
+):
+    """List all notebook mappings (local DB) with optional remote sync."""
+    from app.models import Notebook as NotebookModel
+
+    mappings = (
+        session.query(NotebookModel)
+        .order_by(NotebookModel.notebook_type, NotebookModel.notebook_key)
+        .all()
+    )
+
+    return {
+        "notebooks": [
+            {
+                "notebook_type": nb.notebook_type,
+                "notebook_key": nb.notebook_key,
+                "notebook_id": nb.notebook_id,
+                "display_name": nb.display_name,
+                "source_count": nb.source_count,
+                "created_at": nb.created_at.isoformat() if nb.created_at else None,
+                "last_used_at": nb.last_used_at.isoformat() if nb.last_used_at else None,
+            }
+            for nb in mappings
+        ],
+        "count": len(mappings),
+        "ticker_notebooks": sum(1 for nb in mappings if nb.notebook_type == "ticker"),
+        "category_notebooks": sum(1 for nb in mappings if nb.notebook_type == "category"),
+    }
+
+
+@router.get("/notebooks/remote")
+async def list_remote_notebooks():
+    """List all NotebookLM notebooks from the remote API (for debugging)."""
     from notebooklm import NotebookLMClient
 
     if not NOTEBOOKLM_STORAGE.exists():
         raise HTTPException(status_code=503, detail="NotebookLM not logged in")
 
     async with await NotebookLMClient.from_storage(
-        path=str(NOTEBOOKLM_STORAGE)
+        path=str(NOTEBOOKLM_STORAGE),
     ) as client:
         notebooks = await client.notebooks.list()
         return {

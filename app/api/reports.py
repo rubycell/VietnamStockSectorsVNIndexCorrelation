@@ -238,14 +238,21 @@ def _save_reports(session: Session, reports: list[dict]) -> int:
 
 
 @router.get("")
-def get_reports(session: Session = Depends(get_database_session)):
-    """Get reports from database."""
-    reports = (
-        session.query(Report)
-        .order_by(Report.id.desc())
-        .limit(50)
-        .all()
-    )
+def get_reports(
+    ticker: str | None = None,
+    limit: int = 20,
+    session: Session = Depends(get_database_session),
+):
+    """Get reports from database.
+
+    Returns a compact list by default (no URLs/thumbnails) to reduce
+    token usage when called by LLM agents.  Use /api/reports/{edoc_id}
+    to get full details for a specific report.
+    """
+    query = session.query(Report).order_by(Report.id.desc())
+    if ticker:
+        query = query.filter(Report.ticker == ticker.upper())
+    reports = query.limit(min(limit, 50)).all()
     return {
         "reports": [
             {
@@ -253,28 +260,120 @@ def get_reports(session: Session = Depends(get_database_session)):
                 "title": r.title,
                 "source": r.source,
                 "date": r.date,
-                "detail_url": r.detail_url,
-                "download_url": r.download_url,
-                "thumbnail": r.thumbnail,
-                "report_source": getattr(r, "report_source", "vietstock"),
                 "ticker": getattr(r, "ticker", ""),
             }
             for r in reports
         ],
         "count": len(reports),
-        "source": "database",
     }
 
 
+@router.get("/{edoc_id}")
+def get_report_detail(edoc_id: str, session: Session = Depends(get_database_session)):
+    """Get full report details including URLs."""
+    report = session.query(Report).filter_by(edoc_id=edoc_id).first()
+    if not report:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Report not found")
+    return {
+        "edoc_id": report.edoc_id,
+        "title": report.title,
+        "source": report.source,
+        "date": report.date,
+        "detail_url": report.detail_url,
+        "download_url": report.download_url,
+        "thumbnail": report.thumbnail,
+        "report_source": getattr(report, "report_source", "vietstock"),
+        "ticker": getattr(report, "ticker", ""),
+    }
+
+
+async def _fetch_cafef_pages(
+    cafef_pages: int,
+    session: Session,
+) -> tuple[int, list[str]]:
+    """Fetch multiple pages from CafeF using ASP.NET postback pagination.
+
+    Returns (new_count, errors).
+    """
+    total_new = 0
+    errors = []
+    cafef_headers = {**REQUEST_HEADERS, "Referer": "https://cafef.vn/"}
+
+    try:
+        async with httpx.AsyncClient(
+            follow_redirects=True, timeout=15.0,
+        ) as client:
+            # Page 1: simple GET
+            response = await client.get(CAFEF_URL, headers=cafef_headers)
+            response.raise_for_status()
+            html = response.text
+
+            scraped = _scrape_cafef(html)
+            total_new += _save_reports(session, scraped)
+
+            # Pages 2+: ASP.NET postback with __VIEWSTATE
+            for page_number in range(2, cafef_pages + 1):
+                viewstate = re.search(
+                    r'__VIEWSTATE["\s][^>]*value="([^"]+)"', html,
+                )
+                viewstate_gen = re.search(
+                    r'__VIEWSTATEGENERATOR["\s][^>]*value="([^"]+)"', html,
+                )
+                button_name = re.search(
+                    r'name="([^"]*btnpage[^"]*)"[^>]*value="'
+                    + str(page_number) + '"',
+                    html,
+                )
+
+                if not viewstate or not button_name:
+                    break  # No more pages available
+
+                form_data = {
+                    "__VIEWSTATE": viewstate.group(1),
+                    button_name.group(1): str(page_number),
+                }
+                if viewstate_gen:
+                    form_data["__VIEWSTATEGENERATOR"] = viewstate_gen.group(1)
+
+                response = await client.post(
+                    CAFEF_URL, headers=cafef_headers, data=form_data,
+                )
+                response.raise_for_status()
+                html = response.text
+
+                scraped = _scrape_cafef(html)
+                if not scraped:
+                    break  # Empty page, stop
+                total_new += _save_reports(session, scraped)
+
+    except Exception as error:
+        errors.append(f"CafeF: {error}")
+
+    return total_new, errors
+
+
 @router.post("/fetch")
-async def fetch_reports(session: Session = Depends(get_database_session)):
-    """Scrape latest reports from both Vietstock and CafeF, save new ones."""
+async def fetch_reports(
+    cafef_pages: int = 3,
+    vietstock_pages: int = 3,
+    session: Session = Depends(get_database_session),
+):
+    """Scrape latest reports from both Vietstock and CafeF, save new ones.
+
+    Args:
+        cafef_pages: Number of CafeF pages to scrape (default 3, max 20).
+        vietstock_pages: Number of Vietstock pages to scrape (default 3, max 20).
+    """
+    cafef_pages = min(max(cafef_pages, 1), 20)
+    vietstock_pages = min(max(vietstock_pages, 1), 20)
+
     total_new = 0
     errors = []
 
-    # --- Vietstock (3 pages) ---
+    # --- Vietstock ---
     vietstock_headers = {**REQUEST_HEADERS, "Referer": "https://finance.vietstock.vn/"}
-    for page in range(1, 4):
+    for page in range(1, vietstock_pages + 1):
         url = VIETSTOCK_URL if page == 1 else f"{VIETSTOCK_URL}?page={page}"
         try:
             async with httpx.AsyncClient(
@@ -288,19 +387,10 @@ async def fetch_reports(session: Session = Depends(get_database_session)):
         except Exception as error:
             errors.append(f"Vietstock page {page}: {error}")
 
-    # --- CafeF ---
-    cafef_headers = {**REQUEST_HEADERS, "Referer": "https://cafef.vn/"}
-    try:
-        async with httpx.AsyncClient(
-            follow_redirects=True, timeout=15.0
-        ) as client:
-            response = await client.get(CAFEF_URL, headers=cafef_headers)
-            response.raise_for_status()
-        scraped = _scrape_cafef(response.text)
-        new_count = _save_reports(session, scraped)
-        total_new += new_count
-    except Exception as error:
-        errors.append(f"CafeF: {error}")
+    # --- CafeF (multi-page with ASP.NET postback) ---
+    cafef_new, cafef_errors = await _fetch_cafef_pages(cafef_pages, session)
+    total_new += cafef_new
+    errors.extend(cafef_errors)
 
     return {
         "new_reports": total_new,

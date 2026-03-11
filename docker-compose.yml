@@ -12,6 +12,8 @@ services:
       - DATABASE_URL=sqlite:///data/portfolio.db
       - AI_PROVIDER=gemini
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENCLAW_GATEWAY_URL=http://openclaw:18789
+      - OPENCLAW_HOOKS_TOKEN=${OPENCLAW_HOOKS_TOKEN}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
@@ -25,16 +27,24 @@ services:
       - "18791:18791"
     volumes:
       - ./openclaw:/home/node/.openclaw
+      - openclaw-local:/home/node/.local
+      - openclaw-cache:/home/node/.cache
     env_file: .env
     environment:
       - HOME=/home/node
+      - PATH=/home/node/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - WHATSAPP_API_TOKEN=${WHATSAPP_API_TOKEN:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - ZHIPUAI_API_KEY=${ZHIPUAI_API_KEY}
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
       - FASTAPI_URL=http://fastapi:8000
+      - OPENCLAW_HOOKS_TOKEN=${OPENCLAW_HOOKS_TOKEN}
     command: ["node", "dist/index.js", "gateway", "--bind", "lan"]
     depends_on:
       fastapi:
         condition: service_healthy
+
+volumes:
+  openclaw-local:
+  openclaw-cache:

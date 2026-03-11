@@ -6,6 +6,9 @@ Algorithm:
 3. Find Point B: next candle where close > SMA AND low > SMA
 4. Swing low = MIN(low) from A to B inclusive
 5. Confirmed when Point B is found
+
+Active swing lows are invalidated when a candle closes below them
+(support broken).
 """
 
 import pandas as pd
@@ -80,3 +83,34 @@ def detect_swing_lows(
         })
 
     return swing_lows
+
+
+def filter_active_swing_lows(
+    swing_lows: list[dict],
+    ohlcv: pd.DataFrame,
+) -> list[dict]:
+    """Remove swing lows that have been invalidated by price closing below them.
+
+    A swing low is invalidated (support broken) when any candle AFTER it
+    closes below its price.
+    """
+    if not swing_lows or ohlcv.empty:
+        return swing_lows
+
+    df = ohlcv.copy().sort_values("date").reset_index(drop=True)
+    active = []
+
+    for swing_low in swing_lows:
+        swing_date = swing_low["date"]
+        swing_price = swing_low["price"]
+
+        # Get candles after the swing low date
+        later_candles = df[df["date"] > swing_date]
+
+        # Check if any candle closed below this swing low
+        invalidated = (later_candles["close"] < swing_price).any()
+
+        if not invalidated:
+            active.append(swing_low)
+
+    return active

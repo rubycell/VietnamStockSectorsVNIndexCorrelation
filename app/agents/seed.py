@@ -3,6 +3,11 @@
 from sqlalchemy.orm import Session
 from app.models import Agent
 
+# Cron schedules aligned with OpenClaw cron jobs (Asia/Ho_Chi_Minh)
+SCHEDULE_MARKET_CHECK = "30 11,14 * * 1-5"   # 11:30 & 14:30 ICT, Mon-Fri
+SCHEDULE_END_OF_DAY = "30 15 * * 1-5"         # 15:30 ICT, Mon-Fri
+SCHEDULE_MORNING = "30 7,20 * * 1-5"          # 07:30 & 20:30 ICT, Mon-Fri
+
 INITIAL_AGENTS = [
     {
         "id": "fud-assessor",
@@ -31,7 +36,7 @@ INITIAL_AGENTS = [
             "Look for stocks where the 20-day moving average is rising. "
             "Group by ICB sector if available. Return the top 3 trending sectors."
         ),
-        "schedule": "hourly",
+        "schedule": SCHEDULE_MARKET_CHECK,
         "enabled": True,
         "alert_on_result": True,
     },
@@ -45,7 +50,7 @@ INITIAL_AGENTS = [
             "{volume_multiplier}x their 20-day average volume. "
             "Return ticker, today's volume, average volume, and the multiplier."
         ),
-        "schedule": "hourly",
+        "schedule": SCHEDULE_MARKET_CHECK,
         "enabled": True,
         "alert_on_result": True,
     },
@@ -58,7 +63,7 @@ INITIAL_AGENTS = [
             "Compare sector performance over the last {lookback_days} days. "
             "Calculate average return per sector. Identify sectors gaining vs losing momentum."
         ),
-        "schedule": "daily",
+        "schedule": SCHEDULE_END_OF_DAY,
         "enabled": True,
         "alert_on_result": False,
     },
@@ -73,7 +78,7 @@ INITIAL_AGENTS = [
             "2) Current close is above the 5-day low. "
             "These are potential bounce candidates."
         ),
-        "schedule": "daily",
+        "schedule": SCHEDULE_END_OF_DAY,
         "enabled": True,
         "alert_on_result": True,
     },
@@ -86,7 +91,7 @@ INITIAL_AGENTS = [
             "For holdings tickers, calculate 20-day rolling correlation with VN-Index. "
             "Flag any ticker where correlation dropped below 0.3 (unusual divergence)."
         ),
-        "schedule": "daily",
+        "schedule": SCHEDULE_END_OF_DAY,
         "enabled": True,
         "alert_on_result": True,
     },
@@ -101,7 +106,7 @@ INITIAL_AGENTS = [
             "2) Maximum drawdown of each holding over last 30 days, "
             "3) Concentration risk (% in top 3 holdings)."
         ),
-        "schedule": "hourly",
+        "schedule": SCHEDULE_MARKET_CHECK,
         "enabled": True,
         "alert_on_result": False,
     },
@@ -114,7 +119,7 @@ INITIAL_AGENTS = [
             "Find stocks with: 1) 5-day return > 5%, 2) Volume increasing. "
             "These may be reacting to earnings or news. Return top candidates."
         ),
-        "schedule": "daily",
+        "schedule": SCHEDULE_END_OF_DAY,
         "enabled": True,
         "alert_on_result": True,
     },
@@ -128,7 +133,7 @@ INITIAL_AGENTS = [
             "1) 50-day SMA, 2) 200-day SMA, 3) Recent swing low. "
             "These are potential support test areas."
         ),
-        "schedule": "hourly",
+        "schedule": SCHEDULE_MARKET_CHECK,
         "enabled": True,
         "alert_on_result": True,
     },
@@ -143,7 +148,7 @@ INITIAL_AGENTS = [
             "2) Advance/decline ratio for the last 5 days, "
             "3) New 20-day highs vs lows. Summarize market health."
         ),
-        "schedule": "daily",
+        "schedule": SCHEDULE_END_OF_DAY,
         "enabled": True,
         "alert_on_result": False,
     },
@@ -151,8 +156,10 @@ INITIAL_AGENTS = [
 
 
 def seed_agents(session: Session) -> int:
-    """Seed initial agent definitions. Idempotent -- skips existing agents.
+    """Seed initial agent definitions and sync schedules.
 
+    Creates missing agents and updates schedules on existing ones
+    to stay aligned with OpenClaw cron jobs.
     Returns number of agents created.
     """
     created = 0
@@ -161,6 +168,8 @@ def seed_agents(session: Session) -> int:
         if not existing:
             session.add(Agent(**agent_data))
             created += 1
+        elif existing.schedule != agent_data["schedule"]:
+            existing.schedule = agent_data["schedule"]
 
     session.commit()
     return created

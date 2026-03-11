@@ -7,21 +7,23 @@ description: Generate and send a daily portfolio summary with alerts and P&L
 
 When triggered by the daily cron or when asked for a daily report:
 
-1. Fetch the portfolio summary:
+## ⚠️ MANDATORY: Send acknowledgment IMMEDIATELY, BEFORE any blocking calls.
+
+1. **IMMEDIATELY send this message (BEFORE any API calls):**
    ```
-   curl -s http://fastapi:8000/api/portfolio
+   ⏳ Generating daily report... Results will be sent when complete.
    ```
 
-2. Fetch today's alerts:
+2. Fetch portfolio summary and today's alerts in ONE command:
    ```
-   curl -s http://fastapi:8000/api/alerts
+   curl -s http://fastapi:8000/api/portfolio && echo "---SEPARATOR---" && curl -s http://fastapi:8000/api/alerts
    ```
 
-3. Start rules evaluation job:
+3. Run rules evaluation (blocks until done, no polling needed):
    ```
-   curl -s http://fastapi:8000/api/jobs/start/evaluate-rules
+   curl -s "http://fastapi:8000/api/jobs/start/evaluate-rules?wait=true&timeout=120"
    ```
-   Poll `curl -s http://fastapi:8000/api/jobs/<JOB_ID>` for results.
+   This returns the full result. **Do NOT poll.**
 
 4. Compose a daily report with:
    - **Portfolio Overview**: Total value, total unrealized P&L, number of holdings

@@ -1,7 +1,15 @@
-"""Analyze Vietstock reports using Google NotebookLM."""
+"""Analyze Vietstock reports using Google NotebookLM.
+
+Supports both sync and async (job-based) analysis:
+- POST /api/analyze → starts background job, returns job_id immediately
+- GET /api/analyze/status/{job_id} → poll for results
+- POST /api/analyze/sync → blocks until complete (legacy)
+"""
 
 import asyncio
 import tempfile
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -20,6 +28,12 @@ REQUEST_HEADERS = {
                   "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 }
 
+# ---------------------------------------------------------------------------
+# In-memory job store
+# ---------------------------------------------------------------------------
+
+_jobs: dict[str, dict] = {}
+
 
 class AnalyzeRequest(BaseModel):
     edoc_id: str
@@ -32,6 +46,31 @@ class AnalyzeResponse(BaseModel):
     notebook_id: str
     answer: str
     error: str | None = None
+
+
+class JobSubmittedResponse(BaseModel):
+    job_id: str
+    status: str
+    edoc_id: str
+    title: str
+    message: str
+
+
+class JobStatusResponse(BaseModel):
+    job_id: str
+    status: str  # "pending", "running", "completed", "failed"
+    edoc_id: str
+    title: str
+    answer: str | None = None
+    notebook_id: str | None = None
+    error: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
 
 
 async def _download_report_pdf(download_url: str) -> bytes | None:
@@ -86,12 +125,117 @@ async def _analyze_with_notebooklm(
         Path(temp_path).unlink(missing_ok=True)
 
 
-@router.post("", response_model=AnalyzeResponse)
-async def analyze_report(
+# ---------------------------------------------------------------------------
+# Background job runner
+# ---------------------------------------------------------------------------
+
+
+async def _run_analysis_job(job_id: str, report: dict, question: str) -> None:
+    """Run analysis in the background and update the job store."""
+    job = _jobs[job_id]
+    job["status"] = "running"
+    job["started_at"] = datetime.now(timezone.utc).isoformat()
+
+    try:
+        pdf_bytes = await _download_report_pdf(report["download_url"])
+        if not pdf_bytes:
+            job["status"] = "failed"
+            job["error"] = f"Failed to download PDF from {report['download_url']}"
+            job["completed_at"] = datetime.now(timezone.utc).isoformat()
+            return
+
+        result = await _analyze_with_notebooklm(
+            pdf_bytes, report["title"], question,
+        )
+        job["status"] = "completed"
+        job["answer"] = result["answer"]
+        job["notebook_id"] = result["notebook_id"]
+    except Exception as error:
+        job["status"] = "failed"
+        job["error"] = str(error)
+
+    job["completed_at"] = datetime.now(timezone.utc).isoformat()
+
+
+# ---------------------------------------------------------------------------
+# Async endpoints (preferred — job-based)
+# ---------------------------------------------------------------------------
+
+
+@router.post("", response_model=JobSubmittedResponse)
+async def submit_analysis(
     request: AnalyzeRequest,
     session: Session = Depends(get_database_session),
 ):
-    """Analyze a report by edoc_id using NotebookLM."""
+    """Start analysis as a background job. Returns job_id immediately."""
+    report = session.query(Report).filter_by(edoc_id=request.edoc_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail=f"Report {request.edoc_id} not found")
+
+    job_id = str(uuid.uuid4())[:8]
+
+    # Store report data for the background task (session won't be available)
+    report_data = {
+        "title": report.title,
+        "download_url": report.download_url,
+    }
+
+    _jobs[job_id] = {
+        "job_id": job_id,
+        "status": "pending",
+        "edoc_id": request.edoc_id,
+        "title": report.title,
+        "answer": None,
+        "notebook_id": None,
+        "error": None,
+        "started_at": None,
+        "completed_at": None,
+    }
+
+    # Fire and forget — runs in the background
+    asyncio.create_task(_run_analysis_job(job_id, report_data, request.question))
+
+    return JobSubmittedResponse(
+        job_id=job_id,
+        status="pending",
+        edoc_id=request.edoc_id,
+        title=report.title,
+        message=f"Analysis started. Poll GET /api/analyze/status/{job_id} for results.",
+    )
+
+
+@router.get("/status/{job_id}", response_model=JobStatusResponse)
+async def get_analysis_status(job_id: str):
+    """Check the status of an analysis job. Returns results when completed."""
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    return JobStatusResponse(**job)
+
+
+@router.get("/jobs")
+async def list_jobs():
+    """List all analysis jobs (recent first)."""
+    jobs = sorted(
+        _jobs.values(),
+        key=lambda job: job.get("started_at") or "",
+        reverse=True,
+    )
+    return {"jobs": jobs[:20], "total": len(_jobs)}
+
+
+# ---------------------------------------------------------------------------
+# Sync endpoint (legacy — blocks until complete)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/sync", response_model=AnalyzeResponse)
+async def analyze_report_sync(
+    request: AnalyzeRequest,
+    session: Session = Depends(get_database_session),
+):
+    """Analyze a report synchronously. Blocks for 30-60s. Use POST /api/analyze for async."""
     report = session.query(Report).filter_by(edoc_id=request.edoc_id).first()
     if not report:
         raise HTTPException(status_code=404, detail=f"Report {request.edoc_id} not found")
@@ -118,6 +262,11 @@ async def analyze_report(
         notebook_id=result["notebook_id"],
         answer=result["answer"],
     )
+
+
+# ---------------------------------------------------------------------------
+# Notebook management
+# ---------------------------------------------------------------------------
 
 
 @router.get("/notebooks")

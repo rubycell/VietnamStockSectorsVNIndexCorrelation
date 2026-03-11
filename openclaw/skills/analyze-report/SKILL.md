@@ -17,27 +17,13 @@ description: >
 
 **NEVER answer questions about report content from your own knowledge.**
 Every analysis, summary, detail, target price, recommendation, or question about a report
-MUST go through the analyze_report API endpoint. This endpoint downloads the actual PDF and
-processes it through Google NotebookLM for accurate, source-grounded answers.
+MUST go through the analyze API. This downloads the actual PDF and processes it through
+Google NotebookLM for accurate, source-grounded answers.
 
-- User asks "what does the FRT report say?" → call analyze_report API with the edoc_id
-- User asks "target price for VCB?" → call analyze_report API with the question
-- User asks a follow-up about the same report → call analyze_report API again with the new question
+- User asks "what does the FRT report say?" → start analysis job
+- User asks "target price for VCB?" → start analysis job with the question
 - **Do NOT** summarize, paraphrase, or infer report content on your own
-- User mentions "NotebookLM" or "notebook" → call analyze_report API (100%, no exceptions)
-
-### CRITICAL: Acknowledge-then-deliver pattern for analysis
-
-Analysis takes 30-60+ seconds (NotebookLM downloads and processes the PDF). You MUST:
-
-1. **Send an immediate acknowledgment** to the user BEFORE calling the API:
-   ```
-   ⏳ Analyzing report [title] via NotebookLM... This takes 30-60 seconds. I'll send the results when ready.
-   ```
-2. **Then** call the analyze endpoint and wait for results.
-3. **Then** send the results as a follow-up message.
-
-**Never** call the analyze endpoint without first sending an acknowledgment. The user must know their request is being processed. Silence = broken.
+- User mentions "NotebookLM" or "notebook" → start analysis job (100%, no exceptions)
 
 ### List available reports
 
@@ -53,48 +39,64 @@ When the user asks about reports, latest reports, "báo cáo", research, or anal
    #1 [FRT] ABS - Báo cáo cổ phiếu FRT... (06/03/2026) [CafeF]
    #2 [VCB] KBSV - VCB Tăng trưởng... (05/03/2026) [CafeF]
    ```
-   Include: number, ticker, broker source, title, date, and whether from Vietstock or CafeF.
 
-### Analyze a specific report (default summary)
+### Analyze a report (async job pattern)
 
-When the user asks to analyze a report without a specific question:
+Analysis takes 30-60+ seconds. You MUST follow this 3-step pattern:
 
-1. First list reports if not already shown.
-2. Map user's choice to `edoc_id` from the list.
-3. **Send the acknowledgment message first** (see pattern above).
-4. Call the analyze endpoint (POST — requires exec):
-   ```
-   curl -s -X POST http://fastapi:8000/api/analyze -H "Content-Type: application/json" -d '{"edoc_id": "<edoc_id>"}'
-   ```
-5. Present the AI-generated analysis to the user.
+**Step 1: Start the job and tell the user immediately**
 
-### Ask a custom question about a report
+Submit the analysis job (POST — requires exec). It returns instantly with a `job_id`:
+```
+curl -s -X POST http://fastapi:8000/api/analyze -H "Content-Type: application/json" -d '{"edoc_id": "<edoc_id>"}'
+```
+Or with a custom question:
+```
+curl -s -X POST http://fastapi:8000/api/analyze -H "Content-Type: application/json" -d '{"edoc_id": "<edoc_id>", "question": "<question>"}'
+```
 
-When the user asks a specific question about a report:
+Send the user an immediate message:
+```
+⏳ Đang phân tích báo cáo [title] qua NotebookLM... Kết quả sẽ được gửi khi hoàn tất (30-60 giây).
+```
 
-1. Map the report reference to `edoc_id`.
-2. Extract the user's question.
-3. **Send the acknowledgment message first** (see pattern above).
-4. Call the analyze endpoint (POST — requires exec):
-   ```
-   curl -s -X POST http://fastapi:8000/api/analyze -H "Content-Type: application/json" -d '{"edoc_id": "<edoc_id>", "question": "<user_question>"}'
-   ```
-   The `question` field accepts any text. If the user asks in Vietnamese, pass the question in Vietnamese.
-5. Present the answer clearly.
+**Step 2: Poll for results**
+
+Wait ~30 seconds, then check the job status using `web_fetch` (no exec needed):
+```
+web_fetch("http://fastapi:8000/api/analyze/status/<job_id>")
+```
+
+Check the `status` field:
+- `"pending"` or `"running"` → wait 15 more seconds, poll again
+- `"completed"` → the `answer` field has the results
+- `"failed"` → the `error` field explains what went wrong
+
+**Step 3: Deliver the results**
+
+Send the analysis results to the user as a follow-up message.
+If the job failed, tell the user what went wrong.
+
+### CRITICAL: Never leave the user without results
+
+- **Always poll** until the job completes or fails. Do NOT abandon the job.
+- **Always send results** back to the user, even if it takes multiple polls.
+- If you get distracted by another message, come back and check the job status.
 
 ### Fetch new reports
 
 When asked to refresh, fetch new, or update reports (POST — requires exec):
-
 ```
 curl -s -X POST http://fastapi:8000/api/reports/fetch
 ```
-This scrapes both Vietstock and CafeF for new reports.
 
-### Example conversations
+### Example flow
 
-- "Show me latest reports" → `web_fetch("http://fastapi:8000/api/reports")`
-- "reports" → `web_fetch("http://fastapi:8000/api/reports")`
-- "báo cáo mới" → `web_fetch("http://fastapi:8000/api/reports")`
-- "Analyze report #3" → send ack → `curl -s -X POST http://fastapi:8000/api/analyze ...` → send results
-- "Fetch new reports" → `curl -s -X POST http://fastapi:8000/api/reports/fetch`
+User: "Phân tích báo cáo FRT"
+
+1. `web_fetch("http://fastapi:8000/api/reports")` → find FRT report, get edoc_id
+2. `curl -s -X POST http://fastapi:8000/api/analyze -H "Content-Type: application/json" -d '{"edoc_id": "abc123"}'` → get job_id "f7a2b1c3"
+3. Send: "⏳ Đang phân tích báo cáo FRT qua NotebookLM... Kết quả sẽ được gửi khi hoàn tất."
+4. Wait 30s → `web_fetch("http://fastapi:8000/api/analyze/status/f7a2b1c3")` → status: "running"
+5. Wait 15s → `web_fetch("http://fastapi:8000/api/analyze/status/f7a2b1c3")` → status: "completed", answer: "..."
+6. Send the analysis results to the user.

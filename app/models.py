@@ -72,13 +72,28 @@ class Holding(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     ticker = Column(String, unique=True, nullable=False, index=True)
     total_shares = Column(Integer, default=0)
-    vwap_cost = Column(Float, default=0.0)
+    avg_cost = Column("vwap_cost", Float, default=0.0)
     total_cost = Column(Float, default=0.0)
     realized_pnl = Column(Float, default=0.0)
     unrealized_pnl = Column(Float, default=0.0)
     current_price = Column(Float, nullable=True)
     position_number = Column(Integer, default=1)
     last_updated = Column(DateTime, default=datetime.utcnow)
+
+
+class Position(Base):
+    """Editable position record — can be auto-generated from trades or manually created."""
+    __tablename__ = "positions"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ticker = Column(String, nullable=False, index=True)
+    order_no = Column(String, nullable=True)
+    size = Column(Integer, nullable=False, default=0)
+    avg_price = Column(Float, nullable=False, default=0.0)
+    remaining = Column(Integer, nullable=False, default=0)
+    sold = Column(Integer, nullable=False, default=0)
+    is_manual = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Price(Base):
@@ -103,6 +118,22 @@ class SwingLow(Base):
     confirmed = Column(Boolean, default=False)
     point_a_date = Column(Date, nullable=True)
     point_b_date = Column(Date, nullable=True)
+    active = Column(Boolean, default=True)
+    invalidated_at = Column(Date, nullable=True)
+    detected_at = Column(DateTime, default=datetime.utcnow)
+
+
+class SwingHigh(Base):
+    __tablename__ = "swing_highs"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ticker = Column(String, nullable=False, index=True)
+    date = Column(Date, nullable=False)
+    price = Column(Float, nullable=False)
+    confirmed = Column(Boolean, default=False)
+    point_a_date = Column(Date, nullable=True)
+    point_b_date = Column(Date, nullable=True)
+    active = Column(Boolean, default=True)
+    invalidated_at = Column(Date, nullable=True)
     detected_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -126,6 +157,7 @@ class Alert(Base):
     message = Column(Text, nullable=False)
     fud_context = Column(Text, nullable=True)
     sent_telegram = Column(Boolean, default=False)
+    sent_discord = Column(Boolean, default=False)
     sent_whatsapp = Column(Boolean, default=False)
     sent_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -144,6 +176,22 @@ class Report(Base):
     report_source = Column(String, default="vietstock")
     ticker = Column(String, nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Notebook(Base):
+    """Maps tickers and report categories to persistent NotebookLM notebooks."""
+    __tablename__ = "notebooks"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    notebook_type = Column(String, nullable=False, index=True)  # "ticker" or "category"
+    notebook_key = Column(String, nullable=False, index=True)   # e.g. "HPG" or "bao_cao_vi_mo"
+    notebook_id = Column(String, nullable=False)                # NotebookLM remote ID
+    display_name = Column(String, nullable=False)               # Human-readable name
+    source_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_used_at = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        UniqueConstraint("notebook_type", "notebook_key", name="unique_notebook_mapping"),
+    )
 
 
 class Config(Base):

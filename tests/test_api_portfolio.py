@@ -24,8 +24,8 @@ def client(tmp_path):
 
     # Seed test data
     session = factory()
-    session.add(Holding(ticker="FPT", total_shares=100, vwap_cost=120000, total_cost=12000000, realized_pnl=0, position_number=1))
-    session.add(Holding(ticker="VCB", total_shares=200, vwap_cost=90000, total_cost=18000000, realized_pnl=500000, position_number=2))
+    session.add(Holding(ticker="FPT", total_shares=100, avg_cost=120000, total_cost=12000000, realized_pnl=0, position_number=1))
+    session.add(Holding(ticker="VCB", total_shares=200, avg_cost=90000, total_cost=18000000, realized_pnl=500000, position_number=2))
     session.commit()
     session.close()
 

@@ -163,7 +163,7 @@ def _evaluate_all_rules(tickers: list, session: Session) -> dict:
         context = RuleContext(
             ticker=ticker,
             current_price=current_price,
-            vwap_cost=holding.vwap_cost,
+            avg_cost=holding.avg_cost,
             total_shares=holding.total_shares,
             position_number=holding.position_number or 1,
             latest_swing_low=latest_confirmed.price if latest_confirmed else None,

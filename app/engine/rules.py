@@ -8,7 +8,7 @@ Rules:
 #5 stick_to_strategy - Dashboard label (never alerts)
 #6 fud_reduce_further - FUD escalating -> reduce further
 #7 ptp_to_swing_low - Position #2+ in profit -> partial take-profit
-#8 high_entry_sell_levels - Position #1 near important level -> partial sell
+#8 high_entry_sell_levels - Position #1 entry far above swing low -> sell 50% to pull avg cost to swing low
 #9 stoploss_all_pos2 - Position #2+ below swing low -> stop-loss
 """
 
@@ -20,7 +20,7 @@ from app.engine.fud import FudResult
 class RuleContext:
     ticker: str
     current_price: float
-    vwap_cost: float
+    avg_cost: float
     total_shares: int
     position_number: int
     latest_swing_low: float | None
@@ -151,7 +151,7 @@ def _check_rule7_ptp_to_swing_low(
     """Rule #7: Position #2+ in profit -> partial take-profit to swing low."""
     if not (
         context.position_number >= 2
-        and context.current_price > context.vwap_cost
+        and context.current_price > context.avg_cost
         and context.latest_swing_low
     ):
         return
@@ -164,9 +164,9 @@ def _check_rule7_ptp_to_swing_low(
             severity="info",
             message=(
                 f"{context.ticker} position #{context.position_number}. "
-                f"BE at {context.vwap_cost:,.0f}, "
+                f"Avg cost {context.avg_cost:,.0f}, "
                 f"nearest swing low at {context.latest_swing_low:,.0f}. "
-                f"Consider partial take-profit to pull BE to swing low."
+                f"Consider partial take-profit to pull avg cost to swing low."
             ),
             alert=True,
         )
@@ -176,28 +176,67 @@ def _check_rule7_ptp_to_swing_low(
 def _check_rule8_high_entry_sell_levels(
     context: RuleContext, triggered: list[TriggeredRule]
 ) -> None:
-    """Rule #8: Position #1 near important level -> partial sell."""
-    if context.position_number != 1 or not context.important_levels:
+    """Rule #8: Position #1 entry too far above swing low -> partial sell target.
+
+    If entry is far above the nearest swing low, calculate the price at which
+    selling 50% would pull the remaining BE down to the swing low.
+
+    Math: sell 50% at P → remaining BE = 2*entry - P
+    Want BE ≤ swing_low → P ≥ 2*entry - swing_low
+    Target sell level = 2 * entry - swing_low
+    """
+    if context.position_number != 1:
+        return
+    if not context.latest_swing_low or context.latest_swing_low <= 0:
+        return
+    if context.avg_cost <= 0:
         return
 
-    for level in context.important_levels:
-        distance_pct = abs(context.current_price - level) / level * 100
-        if distance_pct <= PROXIMITY_PCT and context.current_price >= level * 0.98:
-            triggered.append(
-                TriggeredRule(
-                    rule_id="high_entry_sell_levels",
-                    rule_number=8,
-                    ticker=context.ticker,
-                    severity="info",
-                    message=(
-                        f"{context.ticker} reaching important level {level:,.0f}. "
-                        f"Entry was at {context.vwap_cost:,.0f}. "
-                        f"Consider partial sell."
-                    ),
-                    alert=True,
-                )
+    # Only applies when entry is above the swing low
+    if context.avg_cost <= context.latest_swing_low:
+        return
+
+    target_sell_level = 2 * context.avg_cost - context.latest_swing_low
+
+    # Only alert if target is above current price (not yet reached)
+    # and price is approaching it (within PROXIMITY_PCT)
+    if target_sell_level <= context.current_price:
+        # Already at or above target — sell now
+        triggered.append(
+            TriggeredRule(
+                rule_id="high_entry_sell_levels",
+                rule_number=8,
+                ticker=context.ticker,
+                severity="warning",
+                message=(
+                    f"{context.ticker} at {context.current_price:,.0f} is AT/ABOVE "
+                    f"partial sell target {target_sell_level:,.0f}. "
+                    f"Entry {context.avg_cost:,.0f}, swing low {context.latest_swing_low:,.0f}. "
+                    f"Sell 50% to pull avg cost to swing low."
+                ),
+                alert=True,
             )
-            break  # Only alert for nearest level
+        )
+        return
+
+    distance_pct = (target_sell_level - context.current_price) / target_sell_level * 100
+    if distance_pct <= PROXIMITY_PCT:
+        triggered.append(
+            TriggeredRule(
+                rule_id="high_entry_sell_levels",
+                rule_number=8,
+                ticker=context.ticker,
+                severity="info",
+                message=(
+                    f"{context.ticker} at {context.current_price:,.0f} approaching "
+                    f"partial sell target {target_sell_level:,.0f} "
+                    f"({distance_pct:.1f}% away). "
+                    f"Entry {context.avg_cost:,.0f}, swing low {context.latest_swing_low:,.0f}. "
+                    f"Sell 50% at target to pull avg cost to swing low."
+                ),
+                alert=True,
+            )
+        )
 
 
 def _check_rule9_stoploss_all_pos2(

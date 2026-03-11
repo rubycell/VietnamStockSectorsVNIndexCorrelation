@@ -26,7 +26,7 @@ def client(tmp_path):
     # Seed: holding below swing low (should trigger rules #4 and #9)
     session = factory()
     session.add(Holding(
-        ticker="FPT", total_shares=100, vwap_cost=120000,
+        ticker="FPT", total_shares=100, avg_cost=120000,
         total_cost=12000000, current_price=100000, position_number=2
     ))
     session.add(SwingLow(

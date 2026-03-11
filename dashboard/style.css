@@ -451,6 +451,36 @@ select:focus {
     align-items: center;
 }
 
+/* Small button variant */
+.btn-small {
+    padding: 3px 10px;
+    font-size: 12px;
+    border-radius: 4px;
+    background: #334155;
+    color: #94a3b8;
+    border: 1px solid #475569;
+    cursor: pointer;
+}
+.btn-small:hover { background: #475569; color: #f1f5f9; }
+
+/* Icon-only button (delete X, etc.) */
+.btn-icon {
+    background: none;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    font-size: 18px;
+    padding: 0 4px;
+    line-height: 1;
+}
+.btn-icon:hover { color: #ef4444; }
+
+/* Editable cell hover hint */
+.editable-cell:hover {
+    background: #1e3a5f;
+    border-radius: 3px;
+}
+
 /* Inline Edit Input */
 .inline-input {
     background: #1e293b;
@@ -476,6 +506,58 @@ select:focus {
 
 .empty-state p {
     margin: 8px 0;
+}
+
+/* Level Tags */
+.level-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    margin: 2px;
+    font-variant-numeric: tabular-nums;
+}
+
+.level-support {
+    background: #052e16;
+    color: #4ade80;
+    border: 1px solid #166534;
+}
+
+.level-resistance {
+    background: #450a0a;
+    color: #f87171;
+    border: 1px solid #7f1d1d;
+}
+
+.level-round {
+    background: #422006;
+    color: #fbbf24;
+    border: 1px solid #78350f;
+}
+
+.level-manual {
+    background: #2e1065;
+    color: #c084fc;
+    border: 1px solid #4c1d95;
+}
+
+.level-delete-btn {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 2px;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.level-delete-btn:hover {
+    color: #f87171;
 }
 
 footer {

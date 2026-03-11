@@ -24,10 +24,24 @@ SessionFactory = get_session(engine)
 
 @app.on_event("startup")
 def startup_event():
-    """Seed initial agent definitions on application start."""
+    """Seed initial agent definitions and default config on application start."""
+    from app.models import Config as ConfigModel
+
     session = SessionFactory()
     try:
         seed_agents(session)
+
+        # Seed default config values if not already set
+        defaults = {
+            "round_number_increments": {
+                "value": "10,50",
+                "description": "Round number increments in x1000 VND (e.g. 10=10k, 50=50k, 100=100k)",
+            },
+        }
+        for key, entry in defaults.items():
+            if not session.query(ConfigModel).filter_by(key=key).first():
+                session.add(ConfigModel(key=key, value=entry["value"], description=entry["description"]))
+        session.commit()
     finally:
         session.close()
 
@@ -83,6 +97,21 @@ app.include_router(analyze_router)
 
 from app.api.jobs import router as jobs_router
 app.include_router(jobs_router)
+
+from app.api.artifacts import router as artifacts_router
+app.include_router(artifacts_router)
+
+from app.api.levels import router as levels_router
+app.include_router(levels_router)
+
+from app.api.positions import router as positions_router
+app.include_router(positions_router)
+
+from app.api.trades import router as trades_router
+app.include_router(trades_router)
+
+from app.api.import_snapshot import router as import_snapshot_router
+app.include_router(import_snapshot_router)
 
 if DASHBOARD_DIR.exists():
     app.mount("/", StaticFiles(directory=str(DASHBOARD_DIR), html=True), name="dashboard")

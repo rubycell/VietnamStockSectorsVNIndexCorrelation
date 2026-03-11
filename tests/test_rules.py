@@ -9,7 +9,7 @@ def _ctx(**kwargs) -> RuleContext:
     defaults = {
         "ticker": "FPT",
         "current_price": 120000,
-        "vwap_cost": 110000,
+        "avg_cost": 110000,
         "total_shares": 100,
         "position_number": 1,
         "latest_swing_low": 105000,
@@ -65,7 +65,7 @@ def test_rule6_fud_escalation():
 
 def test_rule7_ptp_in_profit():
     # Position #2, in profit (price > cost)
-    ctx = _ctx(position_number=2, current_price=130000, vwap_cost=110000, latest_swing_low=105000)
+    ctx = _ctx(position_number=2, current_price=130000, avg_cost=110000, latest_swing_low=105000)
     triggered = evaluate_rules(ctx)
     rule7 = [r for r in triggered if r.rule_id == "ptp_to_swing_low"]
     assert len(rule7) == 1
@@ -81,7 +81,7 @@ def test_rule8_near_important_level():
 
 def test_rule7_not_triggered_pos1():
     """Rule #7 only triggers for position #2+."""
-    ctx = _ctx(position_number=1, current_price=130000, vwap_cost=110000)
+    ctx = _ctx(position_number=1, current_price=130000, avg_cost=110000)
     triggered = evaluate_rules(ctx)
     rule7 = [r for r in triggered if r.rule_id == "ptp_to_swing_low"]
     assert len(rule7) == 0

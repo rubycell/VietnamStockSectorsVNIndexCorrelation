@@ -55,7 +55,7 @@ def test_single_buy(db_session):
     h = holdings[0]
     assert h["ticker"] == "FPT"
     assert h["total_shares"] == 100
-    assert h["vwap_cost"] == pytest.approx((12000000 + 17000) / 100)
+    assert h["avg_cost"] == pytest.approx((12000000 + 17000) / 100)
     assert h["realized_pnl"] == 0
 
 
@@ -168,7 +168,7 @@ def test_position_count_via_calculate_holdings(db_session):
     assert h["position_number"] == 1  # Only position A remains
 
 
-def test_vwap_with_multiple_buys(db_session):
+def test_avg_cost_with_multiple_buys(db_session):
     session, batch_id = db_session
     # Buy 100 @ 120k = 12M
     _add_fill(session, batch_id, "FPT", "BUY", 100, 120000, 12000000, fee=10000, order_no="BUY1", trading_date=date(2025, 1, 10))
@@ -180,7 +180,7 @@ def test_vwap_with_multiple_buys(db_session):
     holdings = calculate_holdings(session)
     h = holdings[0]
     assert h["total_shares"] == 300
-    # VWAP = (12M + 10k + 22M + 20k) / 300 = 34030000 / 300
-    expected_vwap = (12000000 + 10000 + 22000000 + 20000) / 300
-    assert h["vwap_cost"] == pytest.approx(expected_vwap)
+    # avg_cost = (12M + 10k + 22M + 20k) / 300 = 34030000 / 300
+    expected_avg_cost = (12000000 + 10000 + 22000000 + 20000) / 300
+    assert h["avg_cost"] == pytest.approx(expected_avg_cost)
     assert h["position_number"] == 2  # 2 distinct buy orders, no sells

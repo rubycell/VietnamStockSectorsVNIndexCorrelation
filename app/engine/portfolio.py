@@ -64,7 +64,7 @@ def _count_active_positions(positions: list[dict]) -> int:
 def calculate_holdings(session: Session) -> list[dict]:
     """Calculate current holdings from all trade fills.
 
-    Returns list of dicts with: ticker, total_shares, vwap_cost, total_cost,
+    Returns list of dicts with: ticker, total_shares, avg_cost, total_cost,
     realized_pnl, position_number.
     """
     tickers = [
@@ -83,12 +83,12 @@ def calculate_holdings(session: Session) -> list[dict]:
         total_sold = sum(fill.matched_volume for fill in sells)
         total_shares = total_bought - total_sold
 
-        # VWAP cost = (sum of buy values + fees) / total bought
+        # Average cost = (sum of buy values + fees) / total bought
         if total_bought > 0:
             total_buy_cost = sum(fill.matched_value + fill.fee for fill in buys)
-            vwap_cost = total_buy_cost / total_bought
+            avg_cost = total_buy_cost / total_bought
         else:
-            vwap_cost = 0.0
+            avg_cost = 0.0
 
         realized_pnl = sum(fill.return_pnl for fill in sells)
 
@@ -100,8 +100,8 @@ def calculate_holdings(session: Session) -> list[dict]:
         results.append({
             "ticker": ticker,
             "total_shares": total_shares,
-            "vwap_cost": vwap_cost,
-            "total_cost": vwap_cost * total_shares if total_shares > 0 else 0.0,
+            "avg_cost": avg_cost,
+            "total_cost": avg_cost * total_shares if total_shares > 0 else 0.0,
             "realized_pnl": realized_pnl,
             "unrealized_pnl": 0.0,  # Needs current_price to calculate
             "current_price": None,
@@ -129,7 +129,7 @@ def _fetch_live_price(ticker: str) -> float | None:
         if dataframe is not None and len(dataframe) > 0:
             raw_close = float(dataframe.iloc[-1]["close"])
             # vnstock VCI source returns prices in thousands of VND (e.g. 23.15 = 23,150 VND)
-            # Convert to full VND to match matched_value/vwap_cost units
+            # Convert to full VND to match matched_value/avg_cost units
             return raw_close * 1000
     except (Exception, SystemExit):
         pass
@@ -163,16 +163,16 @@ def update_holdings_table(session: Session, holdings_data: list[dict]) -> None:
             )
             current_price = latest_price.close if latest_price else None
 
-        # Calculate unrealized P&L: (current_price - vwap_cost) * total_shares
+        # Calculate unrealized P&L: (current_price - avg_cost) * total_shares
         if current_price and data["total_shares"] > 0:
-            unrealized_pnl = (current_price - data["vwap_cost"]) * data["total_shares"]
+            unrealized_pnl = (current_price - data["avg_cost"]) * data["total_shares"]
         else:
             unrealized_pnl = 0.0
 
         existing = session.query(Holding).filter_by(ticker=data["ticker"]).first()
         if existing:
             existing.total_shares = data["total_shares"]
-            existing.vwap_cost = data["vwap_cost"]
+            existing.avg_cost = data["avg_cost"]
             existing.total_cost = data["total_cost"]
             existing.realized_pnl = data["realized_pnl"]
             existing.position_number = data["position_number"]
@@ -182,7 +182,7 @@ def update_holdings_table(session: Session, holdings_data: list[dict]) -> None:
             holding = Holding(
                 ticker=data["ticker"],
                 total_shares=data["total_shares"],
-                vwap_cost=data["vwap_cost"],
+                avg_cost=data["avg_cost"],
                 total_cost=data["total_cost"],
                 realized_pnl=data["realized_pnl"],
                 position_number=data["position_number"],

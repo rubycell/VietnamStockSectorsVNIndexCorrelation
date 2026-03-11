@@ -5,7 +5,7 @@
   },
   "agents": {
     "defaults": {
-      "model": "google/gemini-2.5-flash",
+      "model": "google/gemini-3.1-flash-lite",
       "contextPruning": {
         "mode": "cache-ttl",
         "ttl": "1h"
@@ -14,7 +14,7 @@
         "mode": "safeguard"
       },
       "heartbeat": {
-        "every": "30m"
+        "every": "2h"
       }
     }
   },
@@ -37,7 +37,7 @@
         2107602652
       ],
       "groupPolicy": "allowlist",
-      "streaming": "partial"
+      "streaming": "block"
     },
     "discord": {
       "enabled": true,
@@ -49,7 +49,7 @@
       "threadBindings": {
         "spawnAcpSessions": true
       },
-      "streaming": "partial"
+      "streaming": "block"
     }
   },
   "tools": {
@@ -67,6 +67,14 @@
       "mode": "token",
       "token": "3a86f6fa78637f3a3c6f9a96ab753f2392eff92f0a88f35f"
     }
+  },
+  "hooks": {
+    "enabled": true,
+    "token": "${OPENCLAW_HOOKS_TOKEN}",
+    "allowedAgentIds": ["hooks", "main"],
+    "defaultSessionKey": "hook:jobs",
+    "allowRequestSessionKey": true,
+    "allowedSessionKeyPrefixes": ["hook:"]
   },
   "skills": {
     "entries": {
@@ -107,6 +115,12 @@
         }
       },
       "analyze-report": {
+        "enabled": true,
+        "env": {
+          "FASTAPI_URL": "http://fastapi:8000"
+        }
+      },
+      "deliver-job-result": {
         "enabled": true,
         "env": {
           "FASTAPI_URL": "http://fastapi:8000"

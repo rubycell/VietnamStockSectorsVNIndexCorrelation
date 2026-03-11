@@ -7,9 +7,9 @@ description: Forward trading alerts from the rules engine to the user via messag
 
 When called with alert data (from the check cycle or rules evaluation):
 
-1. Use `web_fetch` to get unsent alerts for the active channel:
+1. Fetch unsent alerts for the active channel:
    ```
-   web_fetch("http://fastapi:8000/api/alerts/unsent?channel=<CHANNEL_NAME>")
+   curl -s "http://fastapi:8000/api/alerts/unsent?channel=<CHANNEL_NAME>"
    ```
 
 2. Format each alert message based on severity:

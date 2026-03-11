@@ -7,14 +7,18 @@ description: Run a specific AI agent by name or ID
 
 When asked to run an agent (e.g., "run the trendy sector detector", "check unusual volume"):
 
-1. First, list available agents using `web_fetch`:
+1. First, list available agents:
    ```
-   web_fetch("http://fastapi:8000/api/agents")
+   curl -s http://fastapi:8000/api/agents
    ```
 2. Find the matching agent by name or ID.
-3. Execute the agent (POST — requires exec):
+3. Start the agent execution job (returns instantly):
    ```
-   curl -s -X POST http://fastapi:8000/api/agents/<AGENT_ID>/execute
+   curl -s http://fastapi:8000/api/jobs/start/execute-agent/<AGENT_ID>
    ```
-4. Present the results clearly. If the agent found insights, highlight them.
-5. If the agent failed, report the error.
+4. Poll for results:
+   ```
+   curl -s http://fastapi:8000/api/jobs/<JOB_ID>
+   ```
+5. Present the results clearly. If the agent found insights, highlight them.
+6. If the agent failed, report the error.

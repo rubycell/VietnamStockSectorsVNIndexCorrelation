@@ -81,5 +81,8 @@ app.include_router(reports_router)
 from app.api.analyze_report import router as analyze_router
 app.include_router(analyze_router)
 
+from app.api.jobs import router as jobs_router
+app.include_router(jobs_router)
+
 if DASHBOARD_DIR.exists():
     app.mount("/", StaticFiles(directory=str(DASHBOARD_DIR), html=True), name="dashboard")

@@ -7,19 +7,19 @@ description: Generate and send a daily portfolio summary with alerts and P&L
 
 When triggered by the daily cron or when asked for a daily report:
 
-1. Fetch portfolio summary:
+1. Fetch the portfolio summary:
    ```
-   curl $FASTAPI_URL/api/portfolio
+   curl -s $FASTAPI_URL/api/portfolio
    ```
 
 2. Fetch today's alerts:
    ```
-   curl "$FASTAPI_URL/api/alerts?limit=50"
+   curl -s $FASTAPI_URL/api/alerts
    ```
 
-3. Fetch and run rules evaluation to catch any end-of-day triggers:
+3. Evaluate end-of-day rules:
    ```
-   curl -X POST $FASTAPI_URL/api/rules/evaluate
+   curl -s -X POST $FASTAPI_URL/api/rules/evaluate
    ```
 
 4. Compose a daily report with:

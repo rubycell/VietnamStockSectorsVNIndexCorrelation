@@ -7,13 +7,12 @@ description: Forward trading alerts from the rules engine to the user via messag
 
 When called with alert data (from the check cycle or rules evaluation):
 
-1. Receive the alert context containing:
-   - `ticker`: The stock ticker
-   - `rule_id`: Which rule triggered
-   - `severity`: CRITICAL, WARNING, or INFO
-   - `message`: The alert message
+1. Fetch unsent alerts for the active channel:
+   ```
+   curl -s "$FASTAPI_URL/api/alerts/unsent?channel=<CHANNEL_NAME>"
+   ```
 
-2. Format the alert message based on severity:
+2. Format each alert message based on severity:
    - **CRITICAL** (rules #4, #9): Urgent format with immediate action required
      ```
      🚨 CRITICAL ALERT — {ticker}
@@ -33,12 +32,3 @@ When called with alert data (from the check cycle or rules evaluation):
      ```
 
 3. Send the formatted message to the user.
-
-4. After sending, mark the alert as sent by calling:
-   ```
-   curl -X POST $FASTAPI_URL/api/alerts/{alert_id}/mark-sent \
-     -H "Content-Type: application/json" \
-     -d '{"channel": "telegram"}'
-   ```
-
-5. Only send alerts that have not already been sent to the channel. Check `sent_telegram` or `sent_whatsapp` fields.

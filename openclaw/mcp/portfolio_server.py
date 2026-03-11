@@ -318,8 +318,10 @@ def _handle_request(message: dict) -> dict | None:
 
     match method:
         case "initialize":
+            # Echo back the client's protocol version for compatibility
+            client_version = params.get("protocolVersion", "2024-11-05")
             return _make_response(request_id, {
-                "protocolVersion": "2024-11-05",
+                "protocolVersion": client_version,
                 "capabilities": SERVER_CAPABILITIES,
                 "serverInfo": SERVER_INFO,
             })

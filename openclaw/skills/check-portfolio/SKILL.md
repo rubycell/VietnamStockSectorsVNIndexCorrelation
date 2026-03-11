@@ -7,9 +7,9 @@ description: Check current portfolio holdings, P&L, and position status
 
 When asked about portfolio, holdings, positions, or P&L:
 
-1. Fetch the portfolio summary:
+1. Use `web_fetch` to get the portfolio summary:
    ```
-   curl -s $FASTAPI_URL/api/portfolio
+   web_fetch("http://fastapi:8000/api/portfolio")
    ```
 
 2. Format the response as a clear summary:
@@ -17,7 +17,7 @@ When asked about portfolio, holdings, positions, or P&L:
    - Per-ticker: shares held, average cost, current price, unrealized P&L %
    - Highlight any positions with > 10% loss
 
-3. If asked about a specific ticker:
+3. If asked about a specific ticker, use `web_fetch`:
    ```
-   curl -s $FASTAPI_URL/api/portfolio/<TICKER>
+   web_fetch("http://fastapi:8000/api/portfolio/<TICKER>")
    ```

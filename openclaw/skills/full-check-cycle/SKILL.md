@@ -7,9 +7,9 @@ description: Run the complete trading check cycle — fetch prices, update portf
 
 When asked to run a check cycle, market check, or hourly check:
 
-1. Run the check cycle:
+1. Run the check cycle (POST — requires exec):
    ```
-   curl -s -X POST $FASTAPI_URL/api/check-cycle
+   curl -s -X POST http://fastapi:8000/api/check-cycle
    ```
 
 2. Parse the JSON response. It contains:

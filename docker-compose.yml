@@ -6,35 +6,35 @@ services:
     volumes:
       - ./data:/app/data
       - ./dashboard:/app/dashboard
+      - ~/.notebooklm:/root/.notebooklm:ro
     env_file: .env
     environment:
       - DATABASE_URL=sqlite:///data/portfolio.db
+      - AI_PROVIDER=gemini
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
-    networks:
-      - app-net
 
   openclaw:
     image: ghcr.io/openclaw/openclaw:latest
-    volumes:
-      - ./openclaw:/home/node/.openclaw
     ports:
       - "18789:18789"
+      - "18791:18791"
+    volumes:
+      - ./openclaw:/home/node/.openclaw
     env_file: .env
     environment:
       - HOME=/home/node
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - WHATSAPP_API_TOKEN=${WHATSAPP_API_TOKEN:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ZHIPUAI_API_KEY=${ZHIPUAI_API_KEY}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - FASTAPI_URL=http://fastapi:8000
     command: ["node", "dist/index.js", "gateway", "--bind", "lan"]
     depends_on:
       fastapi:
         condition: service_healthy
-    networks:
-      - app-net
-
-networks:
-  app-net:

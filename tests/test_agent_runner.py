@@ -41,7 +41,7 @@ def test_disabled_agent(db_session):
 def test_code_gen_agent(db_session, code_gen_agent):
     mock_code = 'import json\noutput = json.dumps({"found": 5})'
     with (
-        patch("app.agents.runner._call_claude_for_code", return_value=mock_code),
+        patch("app.agents.runner._call_ai_for_code", return_value=mock_code),
         patch("app.agents.runner._get_data_context", return_value={}),
     ):
         result = run_agent("test-cg", variables={"threshold": 50000}, session=db_session)

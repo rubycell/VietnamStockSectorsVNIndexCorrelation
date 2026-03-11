@@ -98,12 +98,74 @@ def test_multiple_tickers(db_session):
     assert tickers == {"FPT", "VCB"}
 
 
-def test_position_number():
-    """Position #1 = first buy, #2 = second buy, etc."""
-    from app.engine.portfolio import get_position_number
+def test_position_count_sells_from_highest_price(db_session):
+    """Sells consume highest-price positions first.
 
-    buy_dates = [date(2025, 1, 10), date(2025, 1, 15), date(2025, 2, 1)]
-    assert get_position_number(buy_dates) == 3
+    Example from user:
+    - Buy 200 @ 150k (position A)
+    - Buy 500 @ 200k (position B, more expensive)
+    - Sell 100 → removes from B (B has 400 left) → 2 positions
+    - Sell 400 → removes rest of B (B=0) → 1 position (A)
+    - Sell 100 → removes from A (A has 100 left) → 1 position
+    - Sell 100 → A=0 → 0 positions
+    """
+    from app.engine.portfolio import (
+        _build_buy_positions, _apply_sells_to_positions, _count_active_positions,
+    )
+
+    session, batch_id = db_session
+
+    # Buy 200 @ 150k
+    _add_fill(session, batch_id, "FPT", "BUY", 200, 150000, 30000000,
+              order_no="BUY-A", trading_date=date(2025, 1, 10))
+    # Buy 500 @ 200k
+    _add_fill(session, batch_id, "FPT", "BUY", 500, 200000, 100000000,
+              order_no="BUY-B", trading_date=date(2025, 1, 15))
+
+    buys = [f for f in session.query(TradeFill).filter_by(ticker="FPT").all()
+            if f.trade_side == "BUY"]
+
+    # Sell 100 → still 2 positions (B: 400 left, A: 200 left)
+    positions = _build_buy_positions(buys)
+    _apply_sells_to_positions(positions, 100)
+    assert _count_active_positions(positions) == 2
+
+    # Sell 500 total → 1 position (B fully consumed, A: 200 left)
+    positions = _build_buy_positions(buys)
+    _apply_sells_to_positions(positions, 500)
+    assert _count_active_positions(positions) == 1
+
+    # Sell 600 total → 1 position (B gone, A: 100 left)
+    positions = _build_buy_positions(buys)
+    _apply_sells_to_positions(positions, 600)
+    assert _count_active_positions(positions) == 1
+
+    # Sell 700 total → 0 positions (all gone)
+    positions = _build_buy_positions(buys)
+    _apply_sells_to_positions(positions, 700)
+    assert _count_active_positions(positions) == 0
+
+
+def test_position_count_via_calculate_holdings(db_session):
+    """End-to-end: position_number reflects sell-from-highest logic."""
+    from app.engine.portfolio import calculate_holdings
+
+    session, batch_id = db_session
+
+    # Buy 200 @ 150k
+    _add_fill(session, batch_id, "FPT", "BUY", 200, 150000, 30000000,
+              order_no="BUY-A", trading_date=date(2025, 1, 10))
+    # Buy 500 @ 200k
+    _add_fill(session, batch_id, "FPT", "BUY", 500, 200000, 100000000,
+              order_no="BUY-B", trading_date=date(2025, 1, 15))
+    # Sell 500 → B fully consumed, A still has 200
+    _add_fill(session, batch_id, "FPT", "SELL", 500, 210000, 105000000,
+              order_no="SELL-1", trading_date=date(2025, 2, 1))
+
+    holdings = calculate_holdings(session)
+    h = holdings[0]
+    assert h["total_shares"] == 200
+    assert h["position_number"] == 1  # Only position A remains
 
 
 def test_vwap_with_multiple_buys(db_session):
@@ -121,4 +183,4 @@ def test_vwap_with_multiple_buys(db_session):
     # VWAP = (12M + 10k + 22M + 20k) / 300 = 34030000 / 300
     expected_vwap = (12000000 + 10000 + 22000000 + 20000) / 300
     assert h["vwap_cost"] == pytest.approx(expected_vwap)
-    assert h["position_number"] == 2  # 2 distinct buy orders
+    assert h["position_number"] == 2  # 2 distinct buy orders, no sells

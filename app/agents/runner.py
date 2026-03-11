@@ -5,7 +5,10 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL
+from app.config import (
+    ANTHROPIC_API_KEY, ANTHROPIC_MODEL,
+    GEMINI_API_KEY, GEMINI_MODEL, AI_PROVIDER,
+)
 from app.models import Agent, AgentRun
 from app.agents.code_executor import run_generated_code
 from app.agents.registry import AgentRegistry
@@ -25,10 +28,8 @@ def _get_data_context(session: Session) -> dict:
     return context
 
 
-def _call_claude_for_code(prompt_template: str, variables: dict, data_context: dict) -> str:
-    """Call Claude API to generate Python analysis code."""
-    import anthropic
-
+def _build_prompt(prompt_template: str, variables: dict, data_context: dict) -> tuple[str, str]:
+    """Build system prompt and user message for code generation."""
     filled = prompt_template
     for key, value in variables.items():
         filled = filled.replace(f"{{{key}}}", str(value))
@@ -41,30 +42,67 @@ def _call_claude_for_code(prompt_template: str, variables: dict, data_context: d
         else:
             schema_lines.append(f"Table '{name}': empty")
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    response = client.messages.create(
-        model=ANTHROPIC_MODEL,
-        max_tokens=2048,
-        system=(
-            "You are a stock market data analyst. Generate Python code using pandas/numpy. "
-            "Data is in data_context dict. Set 'output' to a JSON string. "
-            "Return ONLY Python code, no markdown."
-        ),
-        messages=[
-            {
-                "role": "user",
-                "content": f"Task: {filled}\n\nData:\n{chr(10).join(schema_lines)}",
-            }
-        ],
+    system_prompt = (
+        "You are a stock market data analyst. Generate Python code using pandas/numpy. "
+        "Data is in data_context dict. Set 'output' to a JSON string. "
+        "Return ONLY Python code, no markdown."
     )
+    user_message = f"Task: {filled}\n\nData:\n{chr(10).join(schema_lines)}"
+    return system_prompt, user_message
 
-    code = response.content[0].text.strip()
+
+def _strip_code_fences(code: str) -> str:
+    """Remove markdown code fences from generated code."""
+    code = code.strip()
     for fence in ["```python", "```"]:
         if code.startswith(fence):
-            code = code[len(fence) :].strip()
+            code = code[len(fence):].strip()
     if code.endswith("```"):
         code = code[:-3].strip()
     return code
+
+
+def _call_gemini(system_prompt: str, user_message: str, max_tokens: int = 2048) -> str:
+    """Call Google Gemini API."""
+    from google import genai
+
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=user_message,
+        config=genai.types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            max_output_tokens=max_tokens,
+        ),
+    )
+    return response.text.strip()
+
+
+def _call_anthropic(system_prompt: str, user_message: str, max_tokens: int = 2048) -> str:
+    """Call Anthropic Claude API."""
+    import anthropic
+
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    response = client.messages.create(
+        model=ANTHROPIC_MODEL,
+        max_tokens=max_tokens,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_message}],
+    )
+    return response.content[0].text.strip()
+
+
+def _call_ai(system_prompt: str, user_message: str, max_tokens: int = 2048) -> str:
+    """Call the configured AI provider."""
+    if AI_PROVIDER == "gemini":
+        return _call_gemini(system_prompt, user_message, max_tokens)
+    return _call_anthropic(system_prompt, user_message, max_tokens)
+
+
+def _call_ai_for_code(prompt_template: str, variables: dict, data_context: dict) -> str:
+    """Call AI to generate Python analysis code."""
+    system_prompt, user_message = _build_prompt(prompt_template, variables, data_context)
+    return _strip_code_fences(_call_ai(system_prompt, user_message))
 
 
 def run_agent(
@@ -94,7 +132,7 @@ def run_agent(
     try:
         if agent.agent_type == "code_gen":
             data_context = _get_data_context(session)
-            generated_code = _call_claude_for_code(
+            generated_code = _call_ai_for_code(
                 agent.prompt_template, variables or {}, data_context
             )
             result = run_generated_code(generated_code, data_context)
@@ -138,24 +176,20 @@ def run_agent(
 
 
 def _run_structured_ai(agent: Agent, variables: dict) -> dict:
-    """Structured AI agent: Claude returns JSON directly."""
-    import anthropic
-
+    """Structured AI agent: returns JSON directly."""
     filled = agent.prompt_template or ""
     for key, value in variables.items():
         filled = filled.replace(f"{{{key}}}", str(value))
 
     try:
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        response = client.messages.create(
-            model=ANTHROPIC_MODEL,
+        raw_text = _call_ai(
+            system_prompt="Respond ONLY with valid JSON. No markdown.",
+            user_message=filled,
             max_tokens=1024,
-            system="Respond ONLY with valid JSON. No markdown.",
-            messages=[{"role": "user", "content": filled}],
         )
         return {
             "success": True,
-            "output": json.loads(response.content[0].text.strip()),
+            "output": json.loads(_strip_code_fences(raw_text)),
             "error": None,
             "generated_code": None,
         }

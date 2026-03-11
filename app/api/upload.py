@@ -75,20 +75,47 @@ async def upload_trades(
     session.add(batch)
     session.flush()
 
-    # Insert fills with deduplication via savepoints
+    # Insert fills — check existing DB rows to avoid re-importing
     imported_count = 0
     skipped_count = 0
 
+    # Pre-load existing fill keys for fast lookup
+    existing_fills = session.query(
+        TradeFill.order_no, TradeFill.matched_price,
+        TradeFill.matched_volume, TradeFill.trading_date,
+    ).all()
+    existing_keys = set(
+        (str(f.order_no), float(f.matched_price), int(f.matched_volume), str(f.trading_date))
+        for f in existing_fills
+    )
+    # Track how many times each key appears in DB vs file
+    from collections import Counter
+    existing_counts = Counter(existing_keys)
+    file_key_counts = Counter()
+
     for _, row in valid_dataframe.iterrows():
+        order_no = str(row.get("order_no", ""))
+        matched_price = float(row["matched_price"])
+        matched_volume = int(row["matched_volume"])
+        trading_date = row["trading_date"]
+
+        fill_key = (order_no, matched_price, matched_volume, str(trading_date))
+        file_key_counts[fill_key] += 1
+
+        # Skip if this occurrence already exists in DB
+        if file_key_counts[fill_key] <= existing_counts.get(fill_key, 0):
+            skipped_count += 1
+            continue
+
         fill = TradeFill(
-            order_no=str(row.get("order_no", "")),
+            order_no=order_no,
             ticker=str(row["ticker"]),
-            trading_date=row["trading_date"],
+            trading_date=trading_date,
             trade_side=str(row["trade_side"]),
             order_volume=int(row.get("order_volume", 0)),
             order_price=float(row.get("order_price", 0)),
-            matched_volume=int(row["matched_volume"]),
-            matched_price=float(row["matched_price"]),
+            matched_volume=matched_volume,
+            matched_price=matched_price,
             matched_value=float(row["matched_value"]),
             fee=float(row.get("fee", 0)),
             tax=float(row.get("tax", 0)),
@@ -116,14 +143,9 @@ async def upload_trades(
             account_type=account_type,
             import_batch_id=batch.id,
         )
-        savepoint = session.begin_nested()
-        try:
-            session.add(fill)
-            session.flush()
-            imported_count += 1
-        except IntegrityError:
-            savepoint.rollback()
-            skipped_count += 1
+        session.add(fill)
+        session.flush()
+        imported_count += 1
 
     # Aggregate fills into trades
     _aggregate_trades(session, valid_dataframe, account_type)

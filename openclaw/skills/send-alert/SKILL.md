@@ -36,7 +36,7 @@ When called with alert data (from the check cycle or rules evaluation):
 
 4. After sending, mark the alert as sent by calling:
    ```
-   curl -X POST {env:FASTAPI_URL}/api/alerts/{alert_id}/mark-sent \
+   curl -X POST $FASTAPI_URL/api/alerts/{alert_id}/mark-sent \
      -H "Content-Type: application/json" \
      -d '{"channel": "telegram"}'
    ```

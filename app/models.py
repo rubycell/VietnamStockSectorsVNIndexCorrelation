@@ -46,12 +46,8 @@ class TradeFill(Base):
     account_type = Column(String, nullable=False)
     import_batch_id = Column(Integer, ForeignKey("import_batches.id"), nullable=False)
     import_batch = relationship("ImportBatch", back_populates="fills")
-    __table_args__ = (
-        UniqueConstraint(
-            "order_no", "matched_price", "matched_volume", "trading_date",
-            name="unique_fill",
-        ),
-    )
+    # No unique constraint — same order can have multiple partial fills
+    # with identical (order_no, price, volume, date) but different cost_basis
 
 
 class Trade(Base):
@@ -132,6 +128,21 @@ class Alert(Base):
     sent_telegram = Column(Boolean, default=False)
     sent_whatsapp = Column(Boolean, default=False)
     sent_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Report(Base):
+    __tablename__ = "reports"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    edoc_id = Column(String, unique=True, nullable=False)
+    title = Column(String, nullable=False)
+    source = Column(String, nullable=True)
+    date = Column(String, nullable=True)
+    detail_url = Column(String, nullable=True)
+    download_url = Column(String, nullable=True)
+    thumbnail = Column(String, nullable=True)
+    report_source = Column(String, default="vietstock")
+    ticker = Column(String, nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

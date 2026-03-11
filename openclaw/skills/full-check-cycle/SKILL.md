@@ -9,7 +9,7 @@ When asked to run a check cycle, market check, or hourly check:
 
 1. Call the FastAPI backend:
    ```
-   curl -X POST {env:FASTAPI_URL}/api/check-cycle
+   curl -X POST $FASTAPI_URL/api/check-cycle
    ```
 
 2. Parse the JSON response. It contains:

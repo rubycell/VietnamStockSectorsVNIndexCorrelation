@@ -8,6 +8,8 @@ uvicorn[standard]
 sqlalchemy
 python-multipart
 anthropic
+google-genai
 httpx
+notebooklm-py
 pytest
 pytest-asyncio

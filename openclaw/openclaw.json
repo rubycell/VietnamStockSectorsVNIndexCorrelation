@@ -1,6 +1,11 @@
 {
+  "meta": {
+    "lastTouchedVersion": "2026.3.8",
+    "lastTouchedAt": "2026-03-10T09:59:09.232Z"
+  },
   "agents": {
     "defaults": {
+      "model": "google/gemini-2.5-flash",
       "contextPruning": {
         "mode": "cache-ttl",
         "ttl": "1h"
@@ -22,14 +27,42 @@
   "channels": {
     "telegram": {
       "enabled": true,
-      "dmPolicy": "pairing",
+      "configWrites": true,
+      "dmPolicy": "allowlist",
       "botToken": "${TELEGRAM_BOT_TOKEN}",
+      "allowFrom": [
+        2107602652
+      ],
+      "groupAllowFrom": [
+        2107602652
+      ],
       "groupPolicy": "allowlist",
       "streaming": "partial"
+    },
+    "discord": {
+      "enabled": true,
+      "configWrites": true,
+      "dmPolicy": "open",
+      "token": "${DISCORD_BOT_TOKEN}",
+      "allowFrom": ["*"],
+      "groupPolicy": "open",
+      "threadBindings": {
+        "spawnAcpSessions": true
+      },
+      "streaming": "partial"
+    }
+  },
+  "tools": {
+    "exec": {
+      "security": "full",
+      "ask": "off"
     }
   },
   "gateway": {
     "mode": "local",
+    "controlUi": {
+      "dangerouslyAllowHostHeaderOriginFallback": true
+    },
     "auth": {
       "mode": "token",
       "token": "3a86f6fa78637f3a3c6f9a96ab753f2392eff92f0a88f35f"
@@ -66,11 +99,19 @@
         "env": {
           "FASTAPI_URL": "http://fastapi:8000"
         }
+      },
+      "import-trades": {
+        "enabled": true,
+        "env": {
+          "FASTAPI_URL": "http://fastapi:8000"
+        }
+      },
+      "analyze-report": {
+        "enabled": true,
+        "env": {
+          "FASTAPI_URL": "http://fastapi:8000"
+        }
       }
     }
-  },
-  "meta": {
-    "lastTouchedVersion": "2026.3.8",
-    "lastTouchedAt": "2026-03-10T09:07:13.610Z"
   }
 }

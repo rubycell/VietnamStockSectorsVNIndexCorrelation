@@ -9,17 +9,17 @@ When triggered by the daily cron or when asked for a daily report:
 
 1. Fetch portfolio summary:
    ```
-   curl {env:FASTAPI_URL}/api/portfolio
+   curl $FASTAPI_URL/api/portfolio
    ```
 
 2. Fetch today's alerts:
    ```
-   curl "{env:FASTAPI_URL}/api/alerts?limit=50"
+   curl "$FASTAPI_URL/api/alerts?limit=50"
    ```
 
 3. Fetch and run rules evaluation to catch any end-of-day triggers:
    ```
-   curl -X POST {env:FASTAPI_URL}/api/rules/evaluate
+   curl -X POST $FASTAPI_URL/api/rules/evaluate
    ```
 
 4. Compose a daily report with:

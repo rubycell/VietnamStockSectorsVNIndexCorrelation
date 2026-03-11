@@ -7,7 +7,7 @@ description: Check current portfolio holdings, P&L, and position status
 
 When asked about portfolio, holdings, positions, or P&L:
 
-1. Call: `curl {env:FASTAPI_URL}/api/portfolio`
+1. Call: `curl $FASTAPI_URL/api/portfolio`
 
 2. Format the response as a clear summary:
    - Total portfolio value and overall P&L

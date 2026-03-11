@@ -1,7 +1,7 @@
 """Full check cycle endpoint — called by OpenClaw cron."""
 
 import time
-from datetime import datetime
+from datetime import datetime, date as date_type, timedelta
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -36,7 +36,8 @@ def _fetch_prices_for_tickers(tickers: list, session: Session) -> dict:
             )
             start_date = str(last_price.date) if last_price else "2025-01-01"
 
-            new_prices = _fetch_from_vnstock(ticker, start_date)
+            end_date = str(date_type.today() + timedelta(days=1))
+            new_prices = _fetch_from_vnstock(ticker, start_date, end_date)
             if new_prices is not None and not new_prices.empty:
                 count = 0
                 for _, row in new_prices.iterrows():
@@ -70,6 +71,8 @@ def _fetch_prices_for_tickers(tickers: list, session: Session) -> dict:
 
 def _detect_all_swing_lows(tickers: list, session: Session) -> dict:
     """Detect swing lows for all tickers with price data."""
+    import pandas as pd
+
     results = {}
     for ticker in tickers:
         prices = (
@@ -81,25 +84,28 @@ def _detect_all_swing_lows(tickers: list, session: Session) -> dict:
         if len(prices) < 20:
             continue
 
-        ohlcv = [
+        ohlcv = pd.DataFrame([
             {"date": str(p.date), "open": p.open, "high": p.high,
              "low": p.low, "close": p.close, "volume": p.volume}
             for p in prices
-        ]
+        ])
         swing_lows = detect_swing_lows(ohlcv)
 
         # Store latest swing lows
         for swing_low in swing_lows[-5:]:
+            swing_date = swing_low["date"]
+            if isinstance(swing_date, str):
+                swing_date = datetime.strptime(swing_date, "%Y-%m-%d").date()
             existing = (
                 session.query(SwingLow)
-                .filter_by(ticker=ticker, date=swing_low["date"])
+                .filter_by(ticker=ticker, date=swing_date)
                 .first()
             )
             if not existing:
                 session.add(SwingLow(
                     ticker=ticker,
-                    date=swing_low["date"],
-                    price=swing_low["price"],
+                    date=swing_date,
+                    price=float(swing_low["price"]),
                     confirmed=swing_low.get("confirmed", False),
                 ))
         session.flush()
@@ -110,7 +116,7 @@ def _detect_all_swing_lows(tickers: list, session: Session) -> dict:
 
 def _evaluate_all_rules(tickers: list, session: Session) -> dict:
     """Evaluate rules for all holdings."""
-    from datetime import date as date_type
+    import pandas as pd
 
     all_triggered = []
 
@@ -138,17 +144,21 @@ def _evaluate_all_rules(tickers: list, session: Session) -> dict:
             .all()
         )
 
-        ohlcv = [
+        ohlcv = pd.DataFrame([
             {"date": str(p.date), "open": p.open, "high": p.high,
              "low": p.low, "close": p.close, "volume": p.volume}
             for p in reversed(prices)
-        ]
+        ])
 
         round_levels = get_round_number_levels(current_price)
         resistance_levels = detect_resistance_zones(ohlcv)
         important_levels = merge_price_levels(round_levels, resistance_levels, [])
 
-        fud_result = detect_fud(vnindex_change=0.0, sector_oversold=0.0)
+        fud_result = detect_fud(vnindex_change=0.0, sector_oversold={})
+
+        latest_confirmed = next(
+            (s for s in swing_lows if s.confirmed), None
+        )
 
         context = RuleContext(
             ticker=ticker,
@@ -156,11 +166,10 @@ def _evaluate_all_rules(tickers: list, session: Session) -> dict:
             vwap_cost=holding.vwap_cost,
             total_shares=holding.total_shares,
             position_number=holding.position_number or 1,
-            swing_lows=[{"price": s.price, "date": str(s.date)} for s in swing_lows],
-            fud_active=fud_result.is_fud,
-            fud_severity=fud_result.severity,
+            latest_swing_low=latest_confirmed.price if latest_confirmed else None,
+            swing_low_confirmed=latest_confirmed is not None,
             important_levels=[level["price"] for level in important_levels],
-            realized_pnl=holding.realized_pnl or 0,
+            fud=fud_result,
         )
 
         triggered = evaluate_rules(context)
@@ -230,6 +239,7 @@ def run_check_cycle(session: Session = Depends(get_database_session)):
         swing_result = _detect_all_swing_lows(tickers, session)
         results["swing-low-detect"] = swing_result
     except Exception as error:
+        session.rollback()
         errors.append({"step": "swing-low-detect", "error": str(error)})
 
     # Step 4: Evaluate rules
@@ -237,8 +247,12 @@ def run_check_cycle(session: Session = Depends(get_database_session)):
         rules_result = _evaluate_all_rules(tickers, session)
         results["rules-evaluate"] = rules_result
     except Exception as error:
+        session.rollback()
         errors.append({"step": "rules-evaluate", "error": str(error)})
 
-    session.commit()
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
 
     return {"success": len(errors) == 0, "results": results, "errors": errors}

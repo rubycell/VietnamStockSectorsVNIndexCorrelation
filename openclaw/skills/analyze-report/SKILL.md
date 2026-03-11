@@ -26,6 +26,19 @@ processes it through Google NotebookLM for accurate, source-grounded answers.
 - **Do NOT** summarize, paraphrase, or infer report content on your own
 - User mentions "NotebookLM" or "notebook" → call analyze_report API (100%, no exceptions)
 
+### CRITICAL: Acknowledge-then-deliver pattern for analysis
+
+Analysis takes 30-60+ seconds (NotebookLM downloads and processes the PDF). You MUST:
+
+1. **Send an immediate acknowledgment** to the user BEFORE calling the API:
+   ```
+   ⏳ Analyzing report [title] via NotebookLM... This takes 30-60 seconds. I'll send the results when ready.
+   ```
+2. **Then** call the analyze endpoint and wait for results.
+3. **Then** send the results as a follow-up message.
+
+**Never** call the analyze endpoint without first sending an acknowledgment. The user must know their request is being processed. Silence = broken.
+
 ### List available reports
 
 When the user asks about reports, latest reports, "báo cáo", research, or analyst recommendations:
@@ -48,12 +61,12 @@ When the user asks to analyze a report without a specific question:
 
 1. First list reports if not already shown.
 2. Map user's choice to `edoc_id` from the list.
-3. Call the analyze endpoint (POST — requires exec):
+3. **Send the acknowledgment message first** (see pattern above).
+4. Call the analyze endpoint (POST — requires exec):
    ```
    curl -s -X POST http://fastapi:8000/api/analyze -H "Content-Type: application/json" -d '{"edoc_id": "<edoc_id>"}'
    ```
-4. Present the AI-generated analysis to the user.
-5. Warn: analysis may take 30-60 seconds (NotebookLM processes the PDF).
+5. Present the AI-generated analysis to the user.
 
 ### Ask a custom question about a report
 
@@ -61,12 +74,13 @@ When the user asks a specific question about a report:
 
 1. Map the report reference to `edoc_id`.
 2. Extract the user's question.
-3. Call the analyze endpoint (POST — requires exec):
+3. **Send the acknowledgment message first** (see pattern above).
+4. Call the analyze endpoint (POST — requires exec):
    ```
    curl -s -X POST http://fastapi:8000/api/analyze -H "Content-Type: application/json" -d '{"edoc_id": "<edoc_id>", "question": "<user_question>"}'
    ```
    The `question` field accepts any text. If the user asks in Vietnamese, pass the question in Vietnamese.
-4. Present the answer clearly.
+5. Present the answer clearly.
 
 ### Fetch new reports
 
@@ -82,5 +96,5 @@ This scrapes both Vietstock and CafeF for new reports.
 - "Show me latest reports" → `web_fetch("http://fastapi:8000/api/reports")`
 - "reports" → `web_fetch("http://fastapi:8000/api/reports")`
 - "báo cáo mới" → `web_fetch("http://fastapi:8000/api/reports")`
-- "Analyze report #3" → `curl -s -X POST http://fastapi:8000/api/analyze ...`
+- "Analyze report #3" → send ack → `curl -s -X POST http://fastapi:8000/api/analyze ...` → send results
 - "Fetch new reports" → `curl -s -X POST http://fastapi:8000/api/reports/fetch`

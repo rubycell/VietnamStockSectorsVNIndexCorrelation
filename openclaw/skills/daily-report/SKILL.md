@@ -14,15 +14,13 @@ When triggered by the daily cron or when asked for a daily report:
    ⏳ Generating daily report... Results will be sent when complete.
    ```
 
-2. Fetch portfolio summary and today's alerts in ONE command:
-   ```
-   curl -s http://fastapi:8000/api/portfolio && echo "---SEPARATOR---" && curl -s http://fastapi:8000/api/alerts
-   ```
+2. Fetch portfolio summary and today's alerts:
+   - **MCP:** Use `get_portfolio` tool, then `list_alerts` tool
+   - **Fallback:** `curl -s http://fastapi:8000/api/portfolio && echo "---SEPARATOR---" && curl -s http://fastapi:8000/api/alerts`
 
 3. Run rules evaluation (blocks until done, no polling needed):
-   ```
-   curl -s "http://fastapi:8000/api/jobs/start/evaluate-rules?wait=true&timeout=120"
-   ```
+   - **MCP:** Use the `evaluate_rules` tool
+   - **Fallback:** `curl -s "http://fastapi:8000/api/jobs/start/evaluate-rules?wait=true&timeout=120"`
    This returns the full result. **Do NOT poll.**
 
 4. Compose a daily report with:

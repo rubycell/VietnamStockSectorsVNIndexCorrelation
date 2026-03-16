@@ -10,6 +10,7 @@ python-multipart
 anthropic
 google-genai
 httpx
+pypdf
 notebooklm-py
 pytest
 pytest-asyncio

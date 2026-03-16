@@ -27,6 +27,15 @@ VIETSTOCK_BASE = "https://finance.vietstock.vn"
 CAFEF_URL = "https://cafef.vn/du-lieu/phan-tich-bao-cao.chn"
 CAFEF_CDN = "https://cafef1.mediacdn.vn/Images/Uploaded/DuLieuDownload/PhanTichBaoCao"
 
+# Report type abbreviations and broker-only names that should NOT be treated as tickers.
+# Note: SSI, MBS, VCI, SHS, TPS, AGR, BSC, HSC, PSI, ABS, VDS are BOTH broker names
+# AND real listed stocks — they are NOT excluded here.
+NOT_TICKERS = {
+    "BCVM", "BCCL", "BCPT", "BCDT", "BCTC", "BCTH", "BCTD", "BCTV",  # report type abbrevs
+    "KBSV", "ORS", "FNS", "MAS",  # broker-only (not listed)
+    "VCBS", "VNDS", "FPTS", "BVSC", "ACBS",
+}
+
 
 def _scrape_vietstock(html: str) -> list[dict]:
     """Extract report entries from Vietstock HTML."""
@@ -101,8 +110,8 @@ def _scrape_vietstock(html: str) -> list[dict]:
 
         # Try to extract ticker from title (first 1-4 uppercase letters before colon/space)
         ticker = ""
-        ticker_match = re.match(r'^([A-Z]{2,4})[\s:—–\-]', title)
-        if ticker_match:
+        ticker_match = re.match(r'^([A-Z][A-Z0-9]{2,3})[\s:—–\-]', title)
+        if ticker_match and ticker_match.group(1) not in NOT_TICKERS:
             ticker = ticker_match.group(1)
 
         reports.append({
@@ -186,15 +195,15 @@ def _scrape_cafef(html: str) -> list[dict]:
             # First match after title is the broker
             source = source_matches[0].strip()
 
-        # Extract ticker from filename or title
+        # Extract ticker from title or filename
         ticker = ""
-        ticker_match = re.match(r'^([A-Z]{2,4})[\s:—–\-/\[]', title)
-        if ticker_match:
+        ticker_match = re.match(r'^([A-Z][A-Z0-9]{2,3})[\s:—–\-/\[]', title)
+        if ticker_match and ticker_match.group(1) not in NOT_TICKERS:
             ticker = ticker_match.group(1)
-        elif not ticker:
+        if not ticker:
             # Try from filename: FRT_260304_...
-            file_ticker = re.match(r'^([A-Z]{2,4})_', filename)
-            if file_ticker:
+            file_ticker = re.match(r'^([A-Z][A-Z0-9]{2,3})_', filename)
+            if file_ticker and file_ticker.group(1) not in NOT_TICKERS:
                 ticker = file_ticker.group(1)
 
         reports.append({
@@ -241,29 +250,49 @@ def _save_reports(session: Session, reports: list[dict]) -> int:
 def get_reports(
     ticker: str | None = None,
     limit: int = 20,
+    full: bool = False,
     session: Session = Depends(get_database_session),
 ):
     """Get reports from database.
 
-    Returns a compact list by default (no URLs/thumbnails) to reduce
-    token usage when called by LLM agents.  Use /api/reports/{edoc_id}
-    to get full details for a specific report.
+    Returns essential fields by default (edoc_id, title, ticker,
+    download_url, date) to reduce token usage when called by LLM agents.
+    Pass ?full=true to get the complete format with all fields.
     """
     query = session.query(Report).order_by(Report.id.desc())
     if ticker:
         query = query.filter(Report.ticker == ticker.upper())
     reports = query.limit(min(limit, 50)).all()
-    return {
-        "reports": [
+
+    if full:
+        report_list = [
             {
                 "edoc_id": r.edoc_id,
                 "title": r.title,
                 "source": r.source,
                 "date": r.date,
                 "ticker": getattr(r, "ticker", ""),
+                "detail_url": r.detail_url,
+                "download_url": r.download_url,
+                "thumbnail": r.thumbnail,
+                "report_source": r.report_source,
             }
             for r in reports
-        ],
+        ]
+    else:
+        report_list = [
+            {
+                "edoc_id": r.edoc_id,
+                "title": r.title,
+                "ticker": getattr(r, "ticker", ""),
+                "download_url": r.download_url,
+                "date": r.date,
+            }
+            for r in reports
+        ]
+
+    return {
+        "reports": report_list,
         "count": len(reports),
     }
 

@@ -175,6 +175,8 @@ class Report(Base):
     thumbnail = Column(String, nullable=True)
     report_source = Column(String, default="vietstock")
     ticker = Column(String, nullable=True, index=True)
+    notebook_imported = Column(Boolean, default=False, index=True)
+    notebook_key = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -192,6 +194,14 @@ class Notebook(Base):
     __table_args__ = (
         UniqueConstraint("notebook_type", "notebook_key", name="unique_notebook_mapping"),
     )
+
+
+class WatchlistItem(Base):
+    __tablename__ = "watchlist_items"
+    id = Column(Integer, primary_key=True)
+    ticker = Column(String, unique=True, index=True, nullable=False)
+    notes = Column(String, default="")
+    added_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Config(Base):

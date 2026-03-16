@@ -1,14 +1,22 @@
 {
   "meta": {
     "lastTouchedVersion": "2026.3.8",
-    "lastTouchedAt": "2026-03-10T09:59:09.232Z"
+    "lastTouchedAt": "2026-03-15T15:19:25.147Z"
   },
   "agents": {
     "defaults": {
-      "model": "google/gemini-3.1-flash-lite",
+      "model": {
+        "primary": "google/gemini-3-flash-preview",
+        "fallbacks": []
+      },
+      "models": {
+        "google/gemini-3-flash-preview": {
+          "alias": "gemini-flash"
+        }
+      },
       "contextPruning": {
         "mode": "cache-ttl",
-        "ttl": "1h"
+        "ttl": "2h"
       },
       "compaction": {
         "mode": "safeguard"
@@ -18,11 +26,30 @@
       }
     }
   },
+  "tools": {
+    "exec": {
+      "security": "full",
+      "ask": "off"
+    }
+  },
   "commands": {
     "native": "auto",
     "nativeSkills": "auto",
     "restart": true,
     "ownerDisplay": "raw"
+  },
+  "hooks": {
+    "enabled": true,
+    "token": "${OPENCLAW_HOOKS_TOKEN}",
+    "defaultSessionKey": "hook:jobs",
+    "allowRequestSessionKey": true,
+    "allowedSessionKeyPrefixes": [
+      "hook:"
+    ],
+    "allowedAgentIds": [
+      "hooks",
+      "main"
+    ]
   },
   "channels": {
     "telegram": {
@@ -31,7 +58,8 @@
       "dmPolicy": "allowlist",
       "botToken": "${TELEGRAM_BOT_TOKEN}",
       "allowFrom": [
-        2107602652
+        2107602652,
+        662702386
       ],
       "groupAllowFrom": [
         2107602652
@@ -42,20 +70,16 @@
     "discord": {
       "enabled": true,
       "configWrites": true,
-      "dmPolicy": "open",
       "token": "${DISCORD_BOT_TOKEN}",
-      "allowFrom": ["*"],
       "groupPolicy": "open",
+      "streaming": "block",
+      "dmPolicy": "open",
+      "allowFrom": [
+        "*"
+      ],
       "threadBindings": {
         "spawnAcpSessions": true
-      },
-      "streaming": "block"
-    }
-  },
-  "tools": {
-    "exec": {
-      "security": "full",
-      "ask": "off"
+      }
     }
   },
   "gateway": {
@@ -67,14 +91,6 @@
       "mode": "token",
       "token": "3a86f6fa78637f3a3c6f9a96ab753f2392eff92f0a88f35f"
     }
-  },
-  "hooks": {
-    "enabled": true,
-    "token": "${OPENCLAW_HOOKS_TOKEN}",
-    "allowedAgentIds": ["hooks", "main"],
-    "defaultSessionKey": "hook:jobs",
-    "allowRequestSessionKey": true,
-    "allowedSessionKeyPrefixes": ["hook:"]
   },
   "skills": {
     "entries": {
@@ -125,7 +141,20 @@
         "env": {
           "FASTAPI_URL": "http://fastapi:8000"
         }
+      },
+      "portfolio-news-monitor": {
+        "enabled": true,
+        "env": {
+          "FASTAPI_URL": "http://fastapi:8000"
+        }
+      },
+      "portfolio-mcp": {
+        "enabled": true,
+        "env": {
+          "FASTAPI_URL": "http://fastapi:8000"
+        }
       }
     }
-  }
+  },
+  "plugins": {}
 }

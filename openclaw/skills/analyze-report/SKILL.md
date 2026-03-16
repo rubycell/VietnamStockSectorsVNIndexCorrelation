@@ -65,12 +65,12 @@ DONE — the backend webhook will deliver the result automatically.
 
 For analysis:
 ```
-⏳ Analyzing report [TITLE] via NotebookLM... Results will be sent when complete (30-60 seconds).
+⏳ Analyzing report [TITLE] via NotebookLM... This may take a few minutes.
 ```
 
 For artifacts (infographic, audio, quiz, etc.):
 ```
-⏳ Generating [ARTIFACT TYPE] for [SUBJECT] via NotebookLM... Results will be sent shortly (about 30-60 seconds).
+⏳ Generating [ARTIFACT TYPE] for [SUBJECT] via NotebookLM... This may take up to 5-10 minutes.
 ```
 
 For fetching reports:
@@ -125,14 +125,12 @@ Every analysis MUST go through the analyze API. This downloads the actual PDF an
 ### List available reports
 
 When user asks about a specific ticker, filter by ticker to reduce response size:
-```
-curl -s "http://fastapi:8000/api/reports?ticker=FRT"
-```
+- **MCP:** Use the `list_reports` tool (filters by ticker if specified)
+- **Fallback:** `curl -s "http://fastapi:8000/api/reports?ticker=FRT"`
 
 For all reports (default 20, max 50):
-```
-curl -s "http://fastapi:8000/api/reports?limit=20"
-```
+- **MCP:** Use the `list_reports` tool
+- **Fallback:** `curl -s "http://fastapi:8000/api/reports?limit=20"`
 
 Show as numbered list: `#1 [FRT] ABS - Report title (06/03/2026)`
 
@@ -140,17 +138,13 @@ Show as numbered list: `#1 [FRT] ABS - Report title (06/03/2026)`
 
 **Step A — IMMEDIATELY tell the user:**
 ```
-⏳ Analyzing report [TITLE] via NotebookLM... Results will be sent when complete (30-60 seconds).
+⏳ Analyzing report [TITLE] via NotebookLM... This may take a few minutes.
 ```
 
 **Step B — Run the blocking call (returns full result, no polling needed):**
-```
-curl -s "http://fastapi:8000/api/jobs/start/analyze?edoc_id=<EDOC_ID>&wait=true&timeout=120"
-```
-Or with a custom question:
-```
-curl -s "http://fastapi:8000/api/jobs/start/analyze?edoc_id=<EDOC_ID>&question=<URL_ENCODED_QUESTION>&wait=true&timeout=120"
-```
+- **MCP:** Use the `analyze_report` tool with `edoc_id` (and optional `question`)
+- **Fallback:** `curl -s "http://fastapi:8000/api/jobs/start/analyze?edoc_id=<EDOC_ID>&wait=true&timeout=120"`
+- With custom question: `curl -s "http://fastapi:8000/api/jobs/start/analyze?edoc_id=<EDOC_ID>&question=<URL_ENCODED_QUESTION>&wait=true&timeout=120"`
 
 - `"status": "completed"` → the `result.answer` field has the analysis
 - `"status": "failed"` → the `error` field explains what went wrong
@@ -173,22 +167,20 @@ Reports are automatically routed to persistent NotebookLM notebooks:
 This means the 2nd HPG report analyzed will have context from the 1st, enabling cross-report questions like "Compare recommendations across recent HPG reports".
 
 To see current notebook mappings:
-```
-curl -s http://fastapi:8000/api/analyze/notebooks
-```
+- **MCP:** Use the `list_notebooks` tool (planned)
+- **Fallback:** `curl -s http://fastapi:8000/api/analyze/notebooks`
 
 ### Generate artifacts from a notebook
 
 After analyzing a report, generate rich content from the notebook.
 
 **Step A: Get the notebook_id** from analysis result or:
-```
-curl -s http://fastapi:8000/api/analyze/notebooks
-```
+- **MCP:** Use the `list_notebooks` tool (planned)
+- **Fallback:** `curl -s http://fastapi:8000/api/analyze/notebooks`
 
 **Step B: IMMEDIATELY tell the user (BEFORE the blocking call):**
 ```
-⏳ Generating [artifact type] for [subject] via NotebookLM... Results will be sent shortly (about 30-60 seconds).
+⏳ Generating [artifact type] for [subject] via NotebookLM... This may take up to 5-10 minutes.
 ```
 
 **Step C: Run the blocking call** (all use `?wait=true`, returns full result, **do NOT poll**):
@@ -289,13 +281,9 @@ If `download_url` is null, provide the `detail_url` link instead so the user can
 ```
 
 **Step B — Run the blocking call:**
-```
-curl -s "http://fastapi:8000/api/jobs/start/fetch-reports?wait=true&timeout=120"
-```
-To fetch more historical reports (e.g. 10 pages of CafeF):
-```
-curl -s "http://fastapi:8000/api/jobs/start/fetch-reports?cafef_pages=10&vietstock_pages=5&wait=true&timeout=180"
-```
+- **MCP:** Use the `fetch_new_reports` tool
+- **Fallback:** `curl -s "http://fastapi:8000/api/jobs/start/fetch-reports?wait=true&timeout=120"`
+- To fetch more pages: `curl -s "http://fastapi:8000/api/jobs/start/fetch-reports?cafef_pages=10&vietstock_pages=5&wait=true&timeout=180"`
 
 **Step C — Deliver results.**
 
@@ -303,14 +291,14 @@ curl -s "http://fastapi:8000/api/jobs/start/fetch-reports?cafef_pages=10&vietsto
 
 **Example 1: "Analyze the FRT report"**
 
-1. `curl -s "http://fastapi:8000/api/reports?ticker=FRT"` → find FRT, get edoc_id
-2. **SEND NOW:** "⏳ Analyzing the FRT report via NotebookLM... Results will be sent when complete (30-60 seconds)."
-3. `curl -s "http://fastapi:8000/api/jobs/start/analyze?edoc_id=abc123&wait=true&timeout=120"` → returns full result
+1. Use `list_reports` tool (or `curl -s "http://fastapi:8000/api/reports?ticker=FRT"`) → find FRT, get edoc_id
+2. **SEND NOW:** "⏳ Analyzing the FRT report via NotebookLM... This may take a few minutes."
+3. Use `analyze_report` tool with `edoc_id` (or `curl -s "http://fastapi:8000/api/jobs/start/analyze?edoc_id=abc123&wait=true&timeout=120"`) → returns full result
 4. Send analysis results to user
 
 **Example 2: "Create infographic for FRT"**
 
-1. `curl -s http://fastapi:8000/api/analyze/notebooks` → find FRT notebook_id
-2. **SEND NOW:** "⏳ Generating infographic for FRT via NotebookLM... Results will be sent shortly (about 30-60 seconds)."
+1. Use `list_notebooks` tool (or `curl -s http://fastapi:8000/api/analyze/notebooks`) → find FRT notebook_id
+2. **SEND NOW:** "⏳ Generating infographic for FRT via NotebookLM... This may take up to 5-10 minutes."
 3. `curl -s "http://fastapi:8000/api/jobs/start/infographic?notebook_id=abc&language=vi&wait=true&timeout=120"` → returns full result
 4. Send infographic image to user

@@ -1,4 +1,4 @@
-"""Trading rules engine — evaluates 9 custom trading rules.
+"""Trading rules engine — evaluates 10 custom trading rules.
 
 Rules:
 #1 no_prediction - Dashboard disclaimer (never alerts)
@@ -10,6 +10,7 @@ Rules:
 #7 ptp_to_swing_low - Position #2+ in profit -> partial take-profit
 #8 high_entry_sell_levels - Position #1 entry far above swing low -> sell 50% to pull avg cost to swing low
 #9 stoploss_all_pos2 - Position #2+ below swing low -> stop-loss
+#10 underwater_below_swing - At a loss AND price below newest swing low (which is below entry) -> critical
 """
 
 from dataclasses import dataclass
@@ -46,7 +47,7 @@ SEVERITY_ORDER = {"none": 0, "medium": 1, "high": 2}
 
 
 def evaluate_rules(context: RuleContext) -> list[TriggeredRule]:
-    """Evaluate all 9 trading rules against a holding context.
+    """Evaluate all 10 trading rules against a holding context.
 
     Returns list of triggered rules.
     """
@@ -58,6 +59,7 @@ def evaluate_rules(context: RuleContext) -> list[TriggeredRule]:
     _check_rule7_ptp_to_swing_low(context, triggered)
     _check_rule8_high_entry_sell_levels(context, triggered)
     _check_rule9_stoploss_all_pos2(context, triggered)
+    _check_rule10_underwater_below_swing(context, triggered)
 
     return triggered
 
@@ -261,6 +263,47 @@ def _check_rule9_stoploss_all_pos2(
                 f"CRITICAL: {context.ticker} position #{context.position_number} "
                 f"below swing low {context.latest_swing_low:,.0f}. "
                 f"Rule #9: stop-loss all, may keep up to 200 shares."
+            ),
+            alert=True,
+        )
+    )
+
+
+def _check_rule10_underwater_below_swing(
+    context: RuleContext, triggered: list[TriggeredRule]
+) -> None:
+    """Rule #10: Position #1 at a loss, price below confirmed swing low that is below entry.
+
+    Conditions (all must be true):
+    1. Position #1
+    2. At a loss: current_price < avg_cost
+    3. Swing low is confirmed
+    4. Swing low is below entry price (avg_cost)
+    5. Current price is below that swing low
+    """
+    if context.position_number != 1:
+        return
+    if not (
+        context.latest_swing_low
+        and context.swing_low_confirmed
+        and context.current_price < context.avg_cost
+        and context.latest_swing_low < context.avg_cost
+        and context.current_price < context.latest_swing_low
+    ):
+        return
+
+    loss_pct = (context.avg_cost - context.current_price) / context.avg_cost * 100
+    triggered.append(
+        TriggeredRule(
+            rule_id="underwater_below_swing",
+            rule_number=10,
+            ticker=context.ticker,
+            severity="critical",
+            message=(
+                f"CRITICAL: {context.ticker} underwater at {context.current_price:,.0f} "
+                f"(entry {context.avg_cost:,.0f}, loss {loss_pct:.1f}%), "
+                f"broke below swing low {context.latest_swing_low:,.0f}. "
+                f"Rule #10: structure broken while at a loss — review position immediately."
             ),
             alert=True,
         )

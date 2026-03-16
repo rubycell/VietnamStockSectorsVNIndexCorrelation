@@ -1,5 +1,6 @@
 """Price data API — cache and fetch from vnstock."""
 
+import logging
 import time
 from datetime import datetime, timedelta
 
@@ -12,6 +13,10 @@ from sqlalchemy.exc import IntegrityError
 from app.main import get_database_session
 from app.models import Price
 from app.config import VNSTOCK_SOURCE
+
+logger = logging.getLogger(__name__)
+
+PRICE_SCALE = 1000  # vnstock returns prices in x1000 VND
 
 router = APIRouter(prefix="/api/prices", tags=["prices"])
 
@@ -86,6 +91,8 @@ def fetch_prices(body: FetchRequest, session: Session = Depends(get_database_ses
                 results[ticker] = 0
                 continue
 
+            logger.info("Fetched %d rows for %s (%s to %s)", len(dataframe), ticker, fetch_start, end_date)
+
             count = 0
             for _, row in dataframe.iterrows():
                 price_date = row.get("time") or row.get("date")
@@ -113,6 +120,7 @@ def fetch_prices(body: FetchRequest, session: Session = Depends(get_database_ses
             results[ticker] = count
 
         except Exception as err:
+            logger.warning("Fetch error for %s: %s", ticker, err)
             errors[ticker] = str(err)
 
         # Rate limit: 5s between requests

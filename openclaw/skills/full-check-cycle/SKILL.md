@@ -15,9 +15,8 @@ When asked to run a check cycle, market check, or hourly check:
    ```
 
 2. Run the check cycle (blocks until done, no polling needed):
-   ```
-   curl -s "http://fastapi:8000/api/jobs/start/check-cycle?wait=true&timeout=300"
-   ```
+   - **MCP:** Use the `run_check_cycle` tool
+   - **Fallback:** `curl -s "http://fastapi:8000/api/jobs/start/check-cycle?wait=true&timeout=300"`
    This returns the full result when the job completes. **Do NOT poll.**
 
 3. Summarize the results for the user:

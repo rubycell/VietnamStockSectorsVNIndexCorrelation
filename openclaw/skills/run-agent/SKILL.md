@@ -10,9 +10,9 @@ When asked to run an agent (e.g., "run the trendy sector detector", "check unusu
 ## ⚠️ MANDATORY: Send acknowledgment IMMEDIATELY, BEFORE the blocking call.
 
 1. First, list available agents:
-   ```
-   curl -s http://fastapi:8000/api/agents
-   ```
+   - **MCP:** Use the `list_agents` tool
+   - **Fallback:** `curl -s http://fastapi:8000/api/agents`
+
 2. Find the matching agent by name or ID.
 
 3. **IMMEDIATELY send this message (BEFORE the blocking call):**
@@ -21,9 +21,8 @@ When asked to run an agent (e.g., "run the trendy sector detector", "check unusu
    ```
 
 4. Execute the agent (blocks until done, no polling needed):
-   ```
-   curl -s "http://fastapi:8000/api/jobs/start/execute-agent/<AGENT_ID>?wait=true&timeout=180"
-   ```
+   - **MCP:** Use the `execute_agent` tool with `agent_id`
+   - **Fallback:** `curl -s "http://fastapi:8000/api/jobs/start/execute-agent/<AGENT_ID>?wait=true&timeout=180"`
    This returns the full result. **Do NOT poll.**
 
 5. Present the results clearly. If the agent found insights, highlight them.

@@ -113,5 +113,14 @@ app.include_router(trades_router)
 from app.api.import_snapshot import router as import_snapshot_router
 app.include_router(import_snapshot_router)
 
+from app.api.search import router as search_router
+app.include_router(search_router)
+
+from app.api.bulk_import import router as bulk_import_router
+app.include_router(bulk_import_router)
+
+from app.api.watchlist import router as watchlist_router
+app.include_router(watchlist_router)
+
 if DASHBOARD_DIR.exists():
     app.mount("/", StaticFiles(directory=str(DASHBOARD_DIR), html=True), name="dashboard")

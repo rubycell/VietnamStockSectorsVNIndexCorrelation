@@ -19,5 +19,7 @@ MARKET_OPEN_HOUR = int(os.getenv("MARKET_OPEN_HOUR", "9"))
 MARKET_CLOSE_HOUR = int(os.getenv("MARKET_CLOSE_HOUR", "15"))
 TIMEZONE = os.getenv("TIMEZONE", "Asia/Ho_Chi_Minh")
 
+SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY", "")
+
 DASHBOARD_DIR = PROJECT_ROOT / "dashboard"
 DATA_DIR = PROJECT_ROOT / "data"

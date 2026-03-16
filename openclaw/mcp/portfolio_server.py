@@ -11,6 +11,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -21,151 +22,45 @@ FASTAPI_URL = os.environ.get("FASTAPI_URL", "http://fastapi:8000")
 # ---------------------------------------------------------------------------
 
 TOOLS = [
-    {
-        "name": "list_reports",
-        "description": (
-            "List broker analysis reports from Vietstock and CafeF. "
-            "Returns report id, ticker, title, source, date, and download URL."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-        },
-    },
-    {
-        "name": "fetch_new_reports",
-        "description": (
-            "Scrape Vietstock and CafeF for new broker analysis reports. "
-            "Saves new reports to the database. Returns count of new reports found."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-        },
-    },
-    {
-        "name": "analyze_report",
-        "description": (
-            "Analyze a broker report using Google NotebookLM. Downloads the PDF "
-            "and processes it through NotebookLM for accurate, source-grounded answers. "
-            "ALWAYS use this for any question about report content — never answer from your own knowledge."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "edoc_id": {
-                    "type": "string",
-                    "description": "The report's edoc_id from list_reports results.",
-                },
-                "question": {
-                    "type": "string",
-                    "description": (
-                        "Question to ask about the report. Defaults to a Vietnamese summary "
-                        "with key recommendations and target prices. Accepts any language."
-                    ),
-                },
-            },
-            "required": ["edoc_id"],
-        },
-    },
-    {
-        "name": "get_portfolio",
-        "description": "Get full portfolio summary with all holdings, P&L, and position status.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-        },
-    },
-    {
-        "name": "get_portfolio_ticker",
-        "description": "Get detailed holdings for a single ticker including position breakdown.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "ticker": {
-                    "type": "string",
-                    "description": "Stock ticker symbol (e.g. VCB, FPT, FRT).",
-                },
-            },
-            "required": ["ticker"],
-        },
-    },
-    {
-        "name": "run_check_cycle",
-        "description": (
-            "Run the full trading check cycle: fetch prices, update portfolio, "
-            "detect swing lows, evaluate rules, and check for alerts."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-        },
-    },
-    {
-        "name": "list_alerts",
-        "description": "List trading alerts, optionally filtered by ticker.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "ticker": {
-                    "type": "string",
-                    "description": "Optional ticker to filter alerts.",
-                },
-            },
-        },
-    },
-    {
-        "name": "list_unsent_alerts",
-        "description": "List alerts that have not been sent to a specific channel.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "channel": {
-                    "type": "string",
-                    "description": "Channel name (e.g. telegram, discord).",
-                    "default": "telegram",
-                },
-            },
-        },
-    },
-    {
-        "name": "fetch_prices",
-        "description": "Fetch latest stock prices from vnstock and update the cache.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-        },
-    },
-    {
-        "name": "evaluate_rules",
-        "description": "Evaluate all trading rules against current holdings.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-        },
-    },
-    {
-        "name": "list_agents",
-        "description": "List all configured AI agents.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-        },
-    },
-    {
-        "name": "execute_agent",
-        "description": "Execute a specific AI agent by its ID.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "agent_id": {
-                    "type": "integer",
-                    "description": "The agent's numeric ID.",
-                },
-            },
-            "required": ["agent_id"],
-        },
-    },
+    # ── Group 1: Portfolio & Trading ──────────────────────────────────────
+    {"name": "get_portfolio", "description": "Get full portfolio summary with all holdings, P&L, and position status.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "get_portfolio_ticker", "description": "Get detailed holdings for a single ticker including position breakdown.", "inputSchema": {"type": "object", "properties": {"ticker": {"type": "string", "description": "Stock ticker symbol (e.g. VCB, FPT, FRT)."}}, "required": ["ticker"]}},
+    {"name": "import_snapshot", "description": "Import a broker portfolio snapshot from a markdown table. Wipes existing data and creates synthetic trades to match.", "inputSchema": {"type": "object", "properties": {"text": {"type": "string", "description": "Markdown table with portfolio data (ticker, shares, avg cost, etc.)."}}, "required": ["text"]}},
+    {"name": "get_positions", "description": "List active positions for a ticker.", "inputSchema": {"type": "object", "properties": {"ticker": {"type": "string", "description": "Stock ticker symbol."}}, "required": ["ticker"]}},
+    {"name": "update_position", "description": "Update an existing position's fields (avg_price, remaining, etc.).", "inputSchema": {"type": "object", "properties": {"position_id": {"type": "integer", "description": "Position ID to update."}, "avg_price": {"type": "number", "description": "New average price."}, "remaining": {"type": "integer", "description": "New remaining shares."}}, "required": ["position_id"]}},
+    {"name": "delete_position", "description": "Delete a position by ID.", "inputSchema": {"type": "object", "properties": {"position_id": {"type": "integer", "description": "Position ID to delete."}}, "required": ["position_id"]}},
+    {"name": "fetch_prices", "description": "Fetch latest stock prices from vnstock and update the cache.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "evaluate_rules", "description": "Evaluate all trading rules against current holdings.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "run_check_cycle", "description": "Run the full trading check cycle: fetch prices, update portfolio, detect swing lows, evaluate rules, and check for alerts.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "list_alerts", "description": "List trading alerts, optionally filtered by ticker.", "inputSchema": {"type": "object", "properties": {"ticker": {"type": "string", "description": "Optional ticker to filter alerts."}}}},
+    {"name": "list_unsent_alerts", "description": "List alerts that have not been sent to a specific channel.", "inputSchema": {"type": "object", "properties": {"channel": {"type": "string", "description": "Channel name (e.g. telegram, discord).", "default": "telegram"}}}},
+    # ── Group 2: NotebookLM & Artifacts ───────────────────────────────────
+    {"name": "list_reports", "description": "List broker analysis reports from Vietstock and CafeF. Returns report id, ticker, title, source, date.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "fetch_new_reports", "description": "Scrape Vietstock and CafeF for new broker analysis reports. Returns count of new reports found.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "analyze_report", "description": "Analyze a broker report using Google NotebookLM. ALWAYS use this for report content — never answer from your own knowledge.", "inputSchema": {"type": "object", "properties": {"edoc_id": {"type": "string", "description": "The report's edoc_id from list_reports."}, "question": {"type": "string", "description": "Question to ask. Defaults to Vietnamese summary with recommendations."}}, "required": ["edoc_id"]}},
+    {"name": "list_notebooks", "description": "List persistent NotebookLM notebooks with their IDs and metadata.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "notebook_chat", "description": "Ask a follow-up question to a NotebookLM notebook. Retains context from all sources.", "inputSchema": {"type": "object", "properties": {"notebook_id": {"type": "string", "description": "Notebook ID from list_notebooks."}, "question": {"type": "string", "description": "Question to ask."}}, "required": ["notebook_id", "question"]}},
+    {"name": "notebook_summary", "description": "Get a quick AI summary of a NotebookLM notebook without generating artifacts.", "inputSchema": {"type": "object", "properties": {"notebook_id": {"type": "string", "description": "Notebook ID."}}, "required": ["notebook_id"]}},
+    {"name": "generate_infographic", "description": "Generate a visual infographic from a NotebookLM notebook.", "inputSchema": {"type": "object", "properties": {"notebook_id": {"type": "string", "description": "Notebook ID."}, "orientation": {"type": "string", "description": "portrait, landscape, or square."}, "detail_level": {"type": "string", "description": "concise, standard, or detailed."}}, "required": ["notebook_id"]}},
+    {"name": "generate_audio", "description": "Generate podcast-style audio from a NotebookLM notebook.", "inputSchema": {"type": "object", "properties": {"notebook_id": {"type": "string", "description": "Notebook ID."}, "audio_format": {"type": "string", "description": "deep_dive, brief, critique, or debate."}, "audio_length": {"type": "string", "description": "short, default, or long."}}, "required": ["notebook_id"]}},
+    {"name": "generate_video", "description": "Generate animated video from a NotebookLM notebook.", "inputSchema": {"type": "object", "properties": {"notebook_id": {"type": "string", "description": "Notebook ID."}, "video_format": {"type": "string", "description": "explainer or brief."}, "video_style": {"type": "string", "description": "classic, whiteboard, kawaii, anime, watercolor, retro_print, heritage, paper_craft."}}, "required": ["notebook_id"]}},
+    {"name": "generate_quiz", "description": "Generate an interactive quiz (HTML) from a NotebookLM notebook.", "inputSchema": {"type": "object", "properties": {"notebook_id": {"type": "string", "description": "Notebook ID."}, "quantity": {"type": "string", "description": "fewer or standard."}, "difficulty": {"type": "string", "description": "easy, medium, or hard."}}, "required": ["notebook_id"]}},
+    {"name": "generate_flashcards", "description": "Generate study flashcards (HTML) from a NotebookLM notebook.", "inputSchema": {"type": "object", "properties": {"notebook_id": {"type": "string", "description": "Notebook ID."}, "quantity": {"type": "string", "description": "fewer or standard."}, "difficulty": {"type": "string", "description": "easy, medium, or hard."}}, "required": ["notebook_id"]}},
+    {"name": "generate_slides", "description": "Generate a slide deck (PDF) from a NotebookLM notebook.", "inputSchema": {"type": "object", "properties": {"notebook_id": {"type": "string", "description": "Notebook ID."}, "slide_format": {"type": "string", "description": "detailed_deck or presenter_slides."}, "slide_length": {"type": "string", "description": "default or short."}}, "required": ["notebook_id"]}},
+    {"name": "generate_report", "description": "Generate a written report from a NotebookLM notebook.", "inputSchema": {"type": "object", "properties": {"notebook_id": {"type": "string", "description": "Notebook ID."}, "report_format": {"type": "string", "description": "briefing_doc, study_guide, blog_post, or custom."}}, "required": ["notebook_id"]}},
+    {"name": "web_research", "description": "Web research using NotebookLM notebook context. Searches and adds found sources.", "inputSchema": {"type": "object", "properties": {"notebook_id": {"type": "string", "description": "Notebook ID."}, "query": {"type": "string", "description": "Research query."}}, "required": ["notebook_id", "query"]}},
+    # ── Group 3: Agents, Search & System ──────────────────────────────────
+    {"name": "list_agents", "description": "List all configured AI agents.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "execute_agent", "description": "Execute a specific AI agent by its ID.", "inputSchema": {"type": "object", "properties": {"agent_id": {"type": "integer", "description": "The agent's numeric ID."}}, "required": ["agent_id"]}},
+    {"name": "google_search", "description": "Search Google for Vietnamese stock news or any query. Defaults to Google News localized to Vietnam.", "inputSchema": {"type": "object", "properties": {"query": {"type": "string", "description": "Search query."}, "search_type": {"type": "string", "description": "nws (news), search (web), isch (images).", "default": "nws"}, "num": {"type": "integer", "description": "Number of results (1-100).", "default": 10}}, "required": ["query"]}},
+    {"name": "get_report_detail", "description": "Get full details for a single report including download URL.", "inputSchema": {"type": "object", "properties": {"edoc_id": {"type": "string", "description": "Report edoc_id."}}, "required": ["edoc_id"]}},
+    {"name": "mark_alert_sent", "description": "Mark an alert as sent via a specific channel.", "inputSchema": {"type": "object", "properties": {"alert_id": {"type": "integer", "description": "Alert ID."}, "channel": {"type": "string", "description": "Channel: telegram, discord, whatsapp."}}, "required": ["alert_id", "channel"]}},
+    {"name": "generate_mind_map", "description": "Generate a structured mind map from a NotebookLM notebook.", "inputSchema": {"type": "object", "properties": {"notebook_id": {"type": "string", "description": "Notebook ID."}}, "required": ["notebook_id"]}},
+    {"name": "generate_study_guide", "description": "Generate a comprehensive study guide from a NotebookLM notebook.", "inputSchema": {"type": "object", "properties": {"notebook_id": {"type": "string", "description": "Notebook ID."}}, "required": ["notebook_id"]}},
+    {"name": "get_ticker_levels", "description": "Get all price levels for a ticker: swing lows, swing highs, round numbers, manual levels.", "inputSchema": {"type": "object", "properties": {"ticker": {"type": "string", "description": "Stock ticker symbol."}}, "required": ["ticker"]}},
+    {"name": "list_jobs", "description": "List recent background jobs, optionally filtered by status.", "inputSchema": {"type": "object", "properties": {"status": {"type": "string", "description": "Filter by status: pending, running, completed, failed."}}}},
+    {"name": "get_job_status", "description": "Get status and result of a specific background job.", "inputSchema": {"type": "object", "properties": {"job_id": {"type": "string", "description": "Job ID."}}, "required": ["job_id"]}},
+    {"name": "get_config", "description": "Get all application configuration values.", "inputSchema": {"type": "object", "properties": {}}},
 ]
 
 # ---------------------------------------------------------------------------
@@ -201,6 +96,17 @@ def _http_request(method: str, path: str, body: dict | None = None) -> dict | st
 # ---------------------------------------------------------------------------
 # Tool dispatch
 # ---------------------------------------------------------------------------
+
+
+def _job_path(job_type: str, arguments: dict, *, timeout: int,
+              extra_keys: list[str] | None = None) -> str:
+    """Build a /api/jobs/start/<type>?... path with wait=true and timeout."""
+    params = {"notebook_id": arguments["notebook_id"], "wait": "true", "timeout": str(timeout)}
+    for key in extra_keys or []:
+        if key in arguments:
+            params[key] = arguments[key]
+    query_string = urllib.parse.urlencode(params)
+    return f"/api/jobs/start/{job_type}?{query_string}"
 
 
 def _call_tool(name: str, arguments: dict) -> Any:
@@ -247,6 +153,102 @@ def _call_tool(name: str, arguments: dict) -> Any:
 
         case "execute_agent":
             return _http_request("POST", f"/api/agents/{arguments['agent_id']}/execute")
+
+        case "google_search":
+            query = arguments["query"]
+            search_type = arguments.get("search_type", "nws")
+            num = arguments.get("num", 10)
+            path = f"/api/search?query={urllib.parse.quote(query)}&search_type={search_type}&num={num}"
+            return _http_request("GET", path)
+
+        # ── New Portfolio & Trading tools ─────────────────────────────────
+
+        case "import_snapshot":
+            return _http_request("POST", "/api/import-snapshot", {"text": arguments["text"]})
+
+        case "get_positions":
+            return _http_request("GET", f"/api/positions/{arguments['ticker']}")
+
+        case "update_position":
+            position_id = arguments.pop("position_id")
+            return _http_request("PUT", f"/api/positions/{position_id}", arguments)
+
+        case "delete_position":
+            return _http_request("DELETE", f"/api/positions/{arguments['position_id']}")
+
+        # ── New NotebookLM & Artifacts tools ──────────────────────────────
+
+        case "list_notebooks":
+            return _http_request("GET", "/api/analyze/notebooks")
+
+        case "notebook_chat":
+            return _http_request("GET", _job_path("chat", arguments, timeout=60,
+                                                   extra_keys=["question"]))
+
+        case "notebook_summary":
+            return _http_request("GET", _job_path("notebook-summary", arguments, timeout=60))
+
+        case "generate_infographic":
+            return _http_request("GET", _job_path("infographic", arguments, timeout=120,
+                                                   extra_keys=["orientation", "detail_level"]))
+
+        case "generate_audio":
+            return _http_request("GET", _job_path("audio", arguments, timeout=180,
+                                                   extra_keys=["audio_format", "audio_length"]))
+
+        case "generate_video":
+            return _http_request("GET", _job_path("video", arguments, timeout=300,
+                                                   extra_keys=["video_format", "video_style"]))
+
+        case "generate_quiz":
+            return _http_request("GET", _job_path("quiz", arguments, timeout=120,
+                                                   extra_keys=["quantity", "difficulty"]))
+
+        case "generate_flashcards":
+            return _http_request("GET", _job_path("flashcards", arguments, timeout=120,
+                                                   extra_keys=["quantity", "difficulty"]))
+
+        case "generate_slides":
+            return _http_request("GET", _job_path("slides", arguments, timeout=120,
+                                                   extra_keys=["slide_format", "slide_length"]))
+
+        case "generate_report":
+            return _http_request("GET", _job_path("report", arguments, timeout=120,
+                                                   extra_keys=["report_format"]))
+
+        case "web_research":
+            return _http_request("GET", _job_path("research", arguments, timeout=120,
+                                                   extra_keys=["query"]))
+
+        # ── New System tools ──────────────────────────────────────────────
+
+        case "get_report_detail":
+            return _http_request("GET", f"/api/reports/{arguments['edoc_id']}")
+
+        case "mark_alert_sent":
+            alert_id = arguments["alert_id"]
+            return _http_request("POST", f"/api/alerts/{alert_id}/mark-sent",
+                                 {"channel": arguments.get("channel", "telegram")})
+
+        case "generate_mind_map":
+            return _http_request("GET", _job_path("mind-map", arguments, timeout=120))
+
+        case "generate_study_guide":
+            return _http_request("GET", _job_path("study-guide", arguments, timeout=120))
+
+        case "get_ticker_levels":
+            return _http_request("GET", f"/api/levels/{arguments['ticker']}")
+
+        case "list_jobs":
+            status = arguments.get("status")
+            path = f"/api/jobs?status={status}" if status else "/api/jobs"
+            return _http_request("GET", path)
+
+        case "get_job_status":
+            return _http_request("GET", f"/api/jobs/{arguments['job_id']}")
+
+        case "get_config":
+            return _http_request("GET", "/api/config")
 
         case _:
             return {"error": f"Unknown tool: {name}"}

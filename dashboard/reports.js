@@ -5,7 +5,7 @@ registerTab('reports', async function initReportsTab() {
     showLoading(container);
 
     try {
-        const data = await apiFetch('/api/reports');
+        const data = await apiFetch('/api/reports?full=true');
         renderReports(container, data, 1);
     } catch (error) {
         showError(container, `Failed to load reports: ${error.message}`);
@@ -105,7 +105,7 @@ function renderReports(container, data, currentPage) {
             const msg = `Found ${result.new_reports} new report(s)`;
             btn.textContent = msg;
             setTimeout(() => { btn.textContent = 'Fetch New'; btn.disabled = false; }, 3000);
-            const freshData = await apiFetch('/api/reports');
+            const freshData = await apiFetch('/api/reports?full=true');
             renderReports(container, freshData, 1);
         } catch (err) {
             btn.textContent = 'Fetch New';
@@ -153,7 +153,7 @@ function renderReports(container, data, currentPage) {
     document.getElementById('refreshReports').addEventListener('click', async () => {
         showLoading(container);
         try {
-            const freshData = await apiFetch('/api/reports?page=' + currentPage);
+            const freshData = await apiFetch('/api/reports?page=' + currentPage + '&full=true');
             renderReports(container, freshData, currentPage);
         } catch (err) {
             showError(container, 'Failed to refresh: ' + err.message);
@@ -165,7 +165,7 @@ function renderReports(container, data, currentPage) {
         prevBtn.addEventListener('click', async () => {
             showLoading(container);
             try {
-                const prevData = await apiFetch('/api/reports?page=' + (currentPage - 1));
+                const prevData = await apiFetch('/api/reports?page=' + (currentPage - 1) + '&full=true');
                 renderReports(container, prevData, currentPage - 1);
             } catch (err) {
                 showError(container, 'Failed to load page: ' + err.message);
@@ -178,7 +178,7 @@ function renderReports(container, data, currentPage) {
         nextBtn.addEventListener('click', async () => {
             showLoading(container);
             try {
-                const nextData = await apiFetch('/api/reports?page=' + (currentPage + 1));
+                const nextData = await apiFetch('/api/reports?page=' + (currentPage + 1) + '&full=true');
                 renderReports(container, nextData, currentPage + 1);
             } catch (err) {
                 showError(container, 'Failed to load page: ' + err.message);

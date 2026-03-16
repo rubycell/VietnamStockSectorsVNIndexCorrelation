@@ -27,9 +27,8 @@ When the user sends or drops an XLSX file (trade history from TCBS), import it i
    - If invalid_rows > 0, mention it
 
 5. After successful import, automatically run the check cycle to update portfolio:
-   ```
-   curl -X POST $FASTAPI_URL/api/check-cycle
-   ```
+   - **MCP:** Use the `run_check_cycle` tool
+   - **Fallback:** `curl -X POST $FASTAPI_URL/api/check-cycle`
    Summarize any triggered rules.
 
 ## Supported File Format

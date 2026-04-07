@@ -16,41 +16,37 @@ description: >
 
 Extract all `holdings[].ticker` values.
 
-### Step 2: Calculate last business day
+### Step 2: Get today and last business day
 
-Use this logic to set the date range context:
-- Today is Tue–Fri → last business day = yesterday
-- Today is Mon → last business day = last Friday
-- Today is Sat → last business day = Friday
-- Today is Sun → last business day = Friday
+Call the market-date endpoint — do not calculate dates yourself:
 
-Mention this date in the NotebookLM analysis prompt.
+- **Fallback:** `curl -s http://fastapi:8000/api/market-date`
 
-### Step 3: Group tickers by sector and search
+Response: `{ "today": "03/17/2026", "last_business_day": "03/14/2026" }`
 
-Group portfolio tickers by sector (from portfolio data). Combine all tickers in each sector into ONE search query — space-separated, just the ticker symbols.
+Use `last_business_day` as `after_date` and `today` as `before_date` in every search call in Step 3.
 
-**One search per sector, maximum 10 searches per day.**
+### Step 3: Fetch all news (combined, deduplicated)
 
-For each sector group, search Google News Vietnam:
+One call runs all search groups in parallel and returns deduplicated results:
 
-- **MCP:** `google_search` tool:
+- **Fallback:** `curl -s "http://fastapi:8000/api/search/combined?after_date=03/14/2026"`
+
+Pass `last_business_day` from Step 2 as `after_date`. The backend groups tickers by sector, runs ≤10 searches concurrently, then removes near-duplicate articles (same event covered by multiple publishers) before returning.
+
+Response:
 ```json
 {
-  "query": "HPG FRT NLG",
-  "search_type": "nws",
-  "num": 10
+  "groups_searched": 8,
+  "total_raw": 64,
+  "total_after_dedup": 41,
+  "results": [{ "title": "...", "snippet": "...", "source": "...", "date": "...", "link": "..." }]
 }
 ```
-- **Fallback:** `curl -s "http://fastapi:8000/api/search?query=HPG+FRT+NLG&search_type=nws&num=10"`
 
-The query is just the ticker symbols separated by spaces. Nothing else.
+Use `results` directly — no further deduplication needed.
 
-### Step 4: Collect all news results
-
-From each search, collect the results (title, snippet, source, date, link). Combine all results into one text block.
-
-### Step 5: Analyze with NotebookLM
+### Step 4: Analyze with NotebookLM
 
 Pick the notebook for the relevant sector (or a general one). Use `notebook_chat` to ask NotebookLM to identify **causal negative news** — meaning events that *cause* harm to the company or sector fundamentals, NOT observations of market price movement.
 
@@ -64,9 +60,14 @@ Pick the notebook for the relevant sector (or a general one). Use `notebook_chat
 
 If no notebook exists for that sector, skip NotebookLM and apply the same filtering criteria manually when summarizing news in your response.
 
-**After analysis, before reporting:** Re-read each item you are about to report. Ask yourself: "Does this describe a market price movement, or does it describe an external event causing harm?" If it describes price movement (selling, declining, pressure, outflow), discard it.
+**After analysis, before reporting:** Re-read each item you are about to report and apply ALL of the following checks — discard if ANY fails:
 
-### Step 6: Report
+1. **Causation check**: Does this describe an external event causing harm, or just a market price movement (selling, pressure, outflow, divergence)? If price movement → discard.
+2. **Freshness check**: Is the news dated within the last 14 days? If older → discard, unless the article explicitly describes a *new development* on an existing situation (e.g. a tariff rate being changed, a court ruling, a new earnings release).
+3. **Ticker relevance check**: Does this event directly affect this specific ticker's business model? (e.g. a seafood tariff affects VHC but not FPT; an ETF rebalancing affects no ticker's fundamentals regardless of who is named) → If the connection is only through market flows or index mechanics, discard.
+4. **Hallucination check**: Is there a real, named source with a specific article date in the search results? If the source is vague ("General News", "contextual assessment", no URL) → discard. Do not report news synthesized from background knowledge.
+
+### Step 5: Report
 
 Only report tickers with bad-sentiment news. Format:
 

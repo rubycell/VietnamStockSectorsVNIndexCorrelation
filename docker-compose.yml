@@ -22,12 +22,13 @@ services:
       retries: 3
 
   openclaw:
-    image: ghcr.io/openclaw/openclaw:latest
+    image: ghcr.io/openclaw/openclaw:2026.3.22
     ports:
       - "18789:18789"
       - "18791:18791"
     volumes:
       - ./openclaw:/home/node/.openclaw
+      - ./openclaw/skills:/app/skills:ro
       - openclaw-local:/home/node/.local
       - openclaw-cache:/home/node/.cache
     env_file: .env

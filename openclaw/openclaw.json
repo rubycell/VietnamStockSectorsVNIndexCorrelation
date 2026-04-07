@@ -1,7 +1,7 @@
 {
   "meta": {
-    "lastTouchedVersion": "2026.3.8",
-    "lastTouchedAt": "2026-03-15T15:19:25.147Z"
+    "lastTouchedVersion": "2026.3.22",
+    "lastTouchedAt": "2026-03-27T00:29:34.433Z"
   },
   "agents": {
     "defaults": {
@@ -65,14 +65,14 @@
         2107602652
       ],
       "groupPolicy": "allowlist",
-      "streaming": "block"
+      "streaming": "partial"
     },
     "discord": {
       "enabled": true,
       "configWrites": true,
       "token": "${DISCORD_BOT_TOKEN}",
       "groupPolicy": "open",
-      "streaming": "block",
+      "streaming": "partial",
       "dmPolicy": "open",
       "allowFrom": [
         "*"
@@ -156,5 +156,11 @@
       }
     }
   },
-  "plugins": {}
+  "plugins": {
+    "allow": [
+      "portfolio-tools",
+      "telegram",
+      "discord"
+    ]
+  }
 }
